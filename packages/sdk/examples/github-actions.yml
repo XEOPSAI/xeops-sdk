@@ -1,0 +1,96 @@
+name: Security Scan with XeOps
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+  schedule:
+    # Run daily at 2 AM
+    - cron: '0 2 * * *'
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Run Security Scan
+        id: scan
+        run: |
+          npx @xeops/scanner-cli scan \
+            --url ${{ secrets.STAGING_URL || 'https://staging.example.com' }} \
+            --api-key ${{ secrets.XEOPS_API_KEY }} \
+            --wait \
+            --timeout 1800 \
+            --pdf security-report.pdf \
+            --validate-poc \
+            --fail-on-high \
+            --json > scan-results.json
+        continue-on-error: true
+
+      - name: Upload Security Report
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: xeops-security-report
+          path: |
+            security-report.pdf
+            scan-results.json
+
+      - name: Parse Results
+        if: always()
+        run: |
+          echo "### XeOps Security Scan Results" >> $GITHUB_STEP_SUMMARY
+
+          CRITICAL=$(jq -r '.metadata.criticalCount // 0' scan-results.json)
+          HIGH=$(jq -r '.metadata.highCount // 0' scan-results.json)
+          MEDIUM=$(jq -r '.metadata.mediumCount // 0' scan-results.json)
+          LOW=$(jq -r '.metadata.lowCount // 0' scan-results.json)
+
+          echo "- **Critical**: $CRITICAL" >> $GITHUB_STEP_SUMMARY
+          echo "- **High**: $HIGH" >> $GITHUB_STEP_SUMMARY
+          echo "- **Medium**: $MEDIUM" >> $GITHUB_STEP_SUMMARY
+          echo "- **Low**: $LOW" >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('scan-results.json', 'utf8'));
+
+            const critical = results.metadata?.criticalCount || 0;
+            const high = results.metadata?.highCount || 0;
+            const medium = results.metadata?.mediumCount || 0;
+            const low = results.metadata?.lowCount || 0;
+
+            const body = `## XeOps Security Scan Results
+
+            | Severity | Count |
+            |----------|-------|
+            | Critical | ${critical} |
+            | High     | ${high} |
+            | Medium   | ${medium} |
+            | Low      | ${low} |
+
+            📄 [Download Full Report](../actions/runs/${{ github.run_id }})
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Fail if vulnerabilities found
+        if: steps.scan.outcome == 'failure'
+        run: exit 1

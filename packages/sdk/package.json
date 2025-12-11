@@ -1,0 +1,37 @@
+{
+  "name": "@xeopsai/scanner-sdk",
+  "version": "1.0.0",
+  "description": "XeOps Security Scanner SDK for CI/CD integration",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "test": "jest"
+  },
+  "keywords": [
+    "xeops",
+    "security",
+    "scanner",
+    "vulnerability",
+    "ci-cd",
+    "devops"
+  ],
+  "author": "XeOps.AI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://xeops-ai.ghe.com/xeops/xeops.git",
+    "directory": "packages/scanner-sdk"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

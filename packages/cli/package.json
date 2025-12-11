@@ -1,0 +1,40 @@
+{
+  "name": "@xeopsai/scanner-cli",
+  "version": "1.0.0",
+  "description": "XeOps Security Scanner CLI for CI/CD pipelines",
+  "main": "dist/index.js",
+  "bin": {
+    "xeops-scan": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "xeops",
+    "security",
+    "scanner",
+    "cli",
+    "ci-cd"
+  ],
+  "author": "XeOps.AI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://xeops-ai.ghe.com/xeops/xeops.git",
+    "directory": "packages/scanner-cli"
+  },
+  "dependencies": {
+    "@xeopsai/scanner-sdk": "^1.0.0",
+    "commander": "^11.0.0",
+    "chalk": "^4.1.2",
+    "ora": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

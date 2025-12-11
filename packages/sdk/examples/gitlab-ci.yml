@@ -1,0 +1,59 @@
+stages:
+  - test
+  - security
+
+security_scan:
+  stage: security
+  image: node:18
+
+  variables:
+    SCAN_URL: "${CI_ENVIRONMENT_URL}"
+    FAIL_ON_HIGH: "true"
+
+  before_script:
+    - npm install -g @xeops/scanner-cli
+
+  script:
+    # Run security scan
+    - |
+      xeops-scan scan \
+        --url "${SCAN_URL}" \
+        --api-key "${XEOPS_API_KEY}" \
+        --wait \
+        --timeout 1800 \
+        --pdf security-report.pdf \
+        --validate-poc \
+        --fail-on-high \
+        --json | tee scan-results.json
+
+  after_script:
+    # Parse results
+    - |
+      if [ -f scan-results.json ]; then
+        CRITICAL=$(jq -r '.metadata.criticalCount // 0' scan-results.json)
+        HIGH=$(jq -r '.metadata.highCount // 0' scan-results.json)
+        MEDIUM=$(jq -r '.metadata.mediumCount // 0' scan-results.json)
+        LOW=$(jq -r '.metadata.lowCount // 0' scan-results.json)
+
+        echo "Security Scan Summary:"
+        echo "  Critical: $CRITICAL"
+        echo "  High: $HIGH"
+        echo "  Medium: $MEDIUM"
+        echo "  Low: $LOW"
+      fi
+
+  artifacts:
+    when: always
+    paths:
+      - security-report.pdf
+      - scan-results.json
+    reports:
+      junit: security-report.xml
+    expire_in: 30 days
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+  allow_failure: false
