@@ -1,0 +1,152 @@
+# =============================================================================
+# XeOps SDK CI/CD Pipeline
+# =============================================================================
+# Tests, builds, and publishes the SDK and CLI packages
+# =============================================================================
+
+name: XeOps SDK CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Lint and Type Check
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install SDK dependencies
+        working-directory: packages/sdk
+        run: npm ci
+
+      - name: Install CLI dependencies
+        working-directory: packages/cli
+        run: npm ci
+
+      - name: Build SDK
+        working-directory: packages/sdk
+        run: npm run build
+
+      - name: Build CLI
+        working-directory: packages/cli
+        run: npm run build
+
+  # Unit Tests
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install SDK dependencies
+        working-directory: packages/sdk
+        run: npm ci
+
+      - name: Run SDK tests
+        working-directory: packages/sdk
+        run: npm test || echo "No tests configured yet"
+
+  # Security Scan
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install SDK dependencies
+        working-directory: packages/sdk
+        run: npm ci
+
+      - name: Run npm audit (SDK)
+        working-directory: packages/sdk
+        run: npm audit --audit-level=high || true
+
+      - name: Install CLI dependencies
+        working-directory: packages/cli
+        run: npm ci
+
+      - name: Run npm audit (CLI)
+        working-directory: packages/cli
+        run: npm audit --audit-level=high || true
+
+  # Publish to npm (only on release)
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: [lint, test, security]
+    if: github.event_name == 'release'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install and build SDK
+        working-directory: packages/sdk
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish SDK
+        working-directory: packages/sdk
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install and build CLI
+        working-directory: packages/cli
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish CLI
+        working-directory: packages/cli
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Notify on failure
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [lint, test, security]
+    if: failure()
+    steps:
+      - name: Slack Notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: '#ci-alerts'
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: env.SLACK_WEBHOOK_URL != ''

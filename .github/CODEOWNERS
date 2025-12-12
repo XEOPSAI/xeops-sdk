@@ -1,0 +1,15 @@
+# =============================================================================
+# XeOps SDK - Code Owners
+# =============================================================================
+
+# Default owners
+*                           @XEOPSAI/sdk-team
+
+# SDK Package
+/packages/sdk/              @XEOPSAI/sdk-team
+
+# CLI Package
+/packages/cli/              @XEOPSAI/sdk-team
+
+# CI/CD
+/.github/                   @XEOPSAI/devops-team

@@ -174,7 +174,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run XeOps Scan
-        uses: xeops-sofyen/xeops-guardian-action@v1
+        uses: XEOPSAI/xeops-guardian-action@v1
         with:
           api-key: ${{ secrets.XEOPS_API_KEY }}
           target: https://staging.example.com
@@ -260,7 +260,7 @@ See the [examples](./examples) directory for more detailed examples:
 ## Support
 
 - Documentation: https://docs.xeops.io
-- Issues: https://github.com/xeops-sofyen/xeops-sdk/issues
+- Issues: https://github.com/XEOPSAI/xeops-sdk/issues
 - Email: support@xeops.io
 
 ## License
