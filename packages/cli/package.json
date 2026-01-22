@@ -28,7 +28,7 @@
     "@xeopsai/scanner-sdk": "^1.0.0",
     "commander": "^11.0.0",
     "chalk": "^4.1.2",
-    "ora": "^5.4.1"
+    "ora": "^9.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
