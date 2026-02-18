@@ -2,161 +2,96 @@
 
 ## Repository Overview
 
-**XeOps SDK** is the official TypeScript SDK and CLI for the XeOps Security Platform. This is a **public** repository designed to help developers integrate XeOps into their applications and CI/CD pipelines.
+**XeOps SDK** is the official TypeScript SDK and CLI for the XeOps Security Platform. This is a **public** repository (MIT license) for CI/CD integration and programmatic access to the scanner.
 
 ## Structure
 
 ```
 xeops-sdk/
 ├── packages/
-│   ├── sdk/                # @xeops/sdk - TypeScript SDK
+│   ├── sdk/                  # @xeopsai/scanner-sdk
 │   │   ├── src/
-│   │   │   ├── client.ts   # Main XeOpsClient class
-│   │   │   ├── types.ts    # TypeScript types
-│   │   │   ├── errors.ts   # Error classes
-│   │   │   └── resources/  # API resource classes
-│   │   │       ├── scans.ts
-│   │   │       ├── reports.ts
-│   │   │       └── user.ts
+│   │   │   ├── index.ts      # Exports + createClient() factory
+│   │   │   ├── client.ts     # XeOpsScannerClient class (all methods)
+│   │   │   └── types.ts      # TypeScript types + ScannerError class
+│   │   ├── examples/         # CI/CD examples (GitHub Actions, GitLab CI, Jenkins)
 │   │   └── package.json
-│   └── cli/                # @xeops/cli - Command line tool
+│   └── cli/                  # @xeopsai/scanner-cli
 │       ├── src/
-│       │   ├── index.ts    # CLI entry point
-│       │   └── commands/   # CLI commands
-│       │       ├── auth.ts
-│       │       ├── scan.ts
-│       │       └── report.ts
+│       │   └── cli.ts        # Single-file CLI (Commander.js + chalk + ora)
 │       └── package.json
-├── examples/               # Usage examples
-├── docs/                   # API documentation
-└── package.json            # Monorepo root
+├── .github/                  # CI workflow, Dependabot, CODEOWNERS
+├── README.md
+└── LICENSE                   # MIT
 ```
 
-## Key Implementation Details
+> **No root `package.json`** — packages are independent, not an npm workspace.
 
-### SDK Architecture
+## SDK (`packages/sdk/`)
+
+Package: `@xeopsai/scanner-sdk` — Axios-based HTTP client.
+
+### Key Class: `XeOpsScannerClient`
+
+All methods are in `client.ts` (no separate resource files):
+- `startScan(request)` — POST `/api/scans`
+- `getScanResult(scanId)` — GET `/api/scans/:id`
+- `listScans(params?)` — GET `/api/scans`
+- `cancelScan(scanId)` — POST `/api/scans/:id/cancel`
+- `waitForScanCompletion(scanId, options?)` — Polling with timeout
+- `downloadPdfReport(scanId, validatePoc?)` — GET `/api/scans/:id/report/pdf`
+- `getUsage()` — GET `/api/users/usage`
+- `verifyApiKey()` — GET `/api/auth/verify`
+- `healthCheck()` — GET `/health`
+
+### Config
+
 ```typescript
-// client.ts
-export class XeOpsClient {
-  private apiKey: string;
-  private baseUrl: string;
+import { XeOpsScannerClient } from '@xeopsai/scanner-sdk';
 
-  scans: ScansResource;
-  reports: ReportsResource;
-  user: UserResource;
-
-  constructor(config: ClientConfig) {
-    this.apiKey = config.apiKey;
-    this.baseUrl = config.baseUrl || 'https://api.xeops.io';
-
-    this.scans = new ScansResource(this);
-    this.reports = new ReportsResource(this);
-    this.user = new UserResource(this);
-  }
-
-  async request<T>(method: string, path: string, data?: any): Promise<T> {
-    // Implementation
-  }
-}
+const client = new XeOpsScannerClient({
+  apiEndpoint: 'https://api.xeops.ai',
+  apiKey: 'your-api-key',
+  timeout: 60000,    // optional (default: 60s)
+  maxRetries: 3,     // optional
+  debug: false       // optional
+});
 ```
 
-### CLI Architecture
-```typescript
-// Uses Commander.js
-import { Command } from 'commander';
+## CLI (`packages/cli/`)
 
-const program = new Command();
+Package: `@xeopsai/scanner-cli` — Binary: `xeops-scan`
 
-program
-  .name('xeops')
-  .description('XeOps Security Scanner CLI')
-  .version('1.0.0');
+Single command `scan` with options:
+- `-u, --url <url>` — Target URL (required)
+- `-k, --api-key <key>` — API key (required)
+- `-e, --endpoint <endpoint>` — API endpoint
+- `-w, --wait` — Wait for scan completion
+- `--pdf <path>` — Download PDF report
+- `--fail-on-high` / `--fail-on-medium` — CI quality gates
+- `--json` — JSON output
 
-program
-  .command('scan <target>')
-  .option('--profile <profile>', 'Scan profile')
-  .action(async (target, options) => {
-    // Implementation
-  });
-```
+Dependencies: `@xeopsai/scanner-sdk`, `commander`, `chalk`, `ora`
 
 ## Development Commands
 
 ```bash
-# Install dependencies (monorepo)
-npm install
-
-# Build all packages
-npm run build
-
-# Run tests
-npm test
-
-# Publish to npm
-npm run publish
-```
-
-## API Endpoints Used
-
-The SDK calls the xeops-platform API Gateway:
-
-```
-Base URL: https://api.xeops.io
-
-POST /api/scans             # Create scan
-GET  /api/scans             # List scans
-GET  /api/scans/:id         # Get scan
-GET  /api/scans/:id/findings # Get findings
-DELETE /api/scans/:id       # Cancel scan
-POST /api/reports           # Generate report
-GET  /api/reports/:id       # Download report
-GET  /api/users/me          # Current user
-GET  /api/usage             # Usage stats
+# Each package independently:
+cd packages/sdk && npm install && npm run build && npm test  # Jest
+cd packages/cli && npm install && npm run build
 ```
 
 ## Public vs Private
 
 This is a **PUBLIC** repository:
 - Open source (MIT license)
-- Community contributions welcome
-- No proprietary code here
-- Just API client implementation
-
-The SDK does NOT contain:
-- Scanning logic (that's in xeops-core)
-- Authentication logic (that's in xeops-platform)
-- Any XeOps proprietary algorithms
-
-## Publishing
-
-```bash
-# Build packages
-npm run build
-
-# Bump version
-npm version minor
-
-# Publish to npm
-npm publish --access public
-```
+- No proprietary code — just API client wrappers
+- Does NOT contain scanning logic, AI prompts, or authentication logic
 
 ## Related Repos
 
 | Repo | Relationship |
 |------|--------------|
-| xeops-platform | API that this SDK calls |
-| xeops-docs | Documentation references this SDK |
-| xeops-guardian-action | GitHub Action that uses this SDK |
-
-## For Contributors
-
-1. Fork the repository
-2. Create a feature branch
-3. Write tests for new features
-4. Submit a PR with clear description
-
-Guidelines:
-- Follow existing code style
-- 100% test coverage for new code
-- Update README if adding features
-- Update TypeScript types
+| `xeops-platform` | API Gateway that this SDK calls |
+| `xeops-core` | Scanner engine (NOT accessed by SDK directly) |
+| `xeops-docs` | Documentation references this SDK |
