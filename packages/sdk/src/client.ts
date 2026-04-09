@@ -32,7 +32,7 @@ export class XeOpsScannerClient {
       timeout: this.config.timeout,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': buildAuthHeader(this.config.apiKey),
+        Authorization: buildAuthHeader(this.config.apiKey),
         'X-Client': 'scanner-sdk',
         'X-Client-Version': '1.0.0'
       }
@@ -40,12 +40,10 @@ export class XeOpsScannerClient {
 
     // Request interceptor for debugging
     if (this.config.debug) {
-      this.client.interceptors.request.use(
-        (config) => {
-          console.log(`[XeOps SDK] ${config.method?.toUpperCase()} ${config.url}`);
-          return config;
-        }
-      );
+      this.client.interceptors.request.use((config) => {
+        console.log(`[XeOps SDK] ${config.method?.toUpperCase()} ${config.url}`);
+        return config;
+      });
     }
 
     // Response interceptor for error handling
@@ -137,18 +135,12 @@ export class XeOpsScannerClient {
   /**
    * Download PDF report for a scan
    */
-  async downloadPdfReport(
-    scanId: string,
-    validatePoc: boolean = true
-  ): Promise<Buffer> {
+  async downloadPdfReport(scanId: string, validatePoc: boolean = true): Promise<Buffer> {
     try {
-      const response = await this.client.get(
-        `/api/scans/${scanId}/report/pdf`,
-        {
-          params: { validate_poc: validatePoc },
-          responseType: 'arraybuffer'
-        }
-      );
+      const response = await this.client.get(`/api/scans/${scanId}/report/pdf`, {
+        params: { validate_poc: validatePoc },
+        responseType: 'arraybuffer'
+      });
       return Buffer.from(response.data);
     } catch (error) {
       throw this.formatError('Failed to download PDF report', error);
@@ -258,6 +250,6 @@ export class XeOpsScannerClient {
    * Sleep utility
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

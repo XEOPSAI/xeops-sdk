@@ -19,7 +19,11 @@ program
   .description('Start a security scan')
   .requiredOption('-u, --url <url>', 'Target URL to scan')
   .requiredOption('-k, --api-key <key>', 'XeOps API key')
-  .option('-e, --endpoint <endpoint>', 'API endpoint', 'https://xeops-scanner-97758009309.europe-west1.run.app')
+  .option(
+    '-e, --endpoint <endpoint>',
+    'API endpoint',
+    'https://xeops-scanner-97758009309.europe-west1.run.app'
+  )
   .option('-w, --wait', 'Wait for scan to complete', false)
   .option('--timeout <seconds>', 'Scan timeout in seconds', '1800')
   .option('--pdf <path>', 'Download PDF report to path')
@@ -64,20 +68,17 @@ program
 
         const progressSpinner = ora('Initializing...').start();
 
-        result = await client.waitForScanCompletion(
-          scanResponse.scanId,
-          {
-            timeout: parseTimeoutSeconds(options.timeout) * 1000,
-            pollingInterval: 5000,
-            onProgress: (scanResult) => {
-              const progress = scanResult.progress || 0;
-              const currentTest = scanResult.currentTest || 'Running...';
-              const vulnCount = scanResult.vulnerabilitiesFound || 0;
+        result = await client.waitForScanCompletion(scanResponse.scanId, {
+          timeout: parseTimeoutSeconds(options.timeout) * 1000,
+          pollingInterval: 5000,
+          onProgress: (scanResult) => {
+            const progress = scanResult.progress || 0;
+            const currentTest = scanResult.currentTest || 'Running...';
+            const vulnCount = scanResult.vulnerabilitiesFound || 0;
 
-              progressSpinner.text = `Progress: ${progress}% | ${currentTest} | Vulnerabilities: ${vulnCount}`;
-            }
+            progressSpinner.text = `Progress: ${progress}% | ${currentTest} | Vulnerabilities: ${vulnCount}`;
           }
-        );
+        });
 
         progressSpinner.succeed('Scan completed');
 
@@ -98,15 +99,18 @@ program
         // Exit with appropriate code based on severity
         const exitCode = getExitCode(result, options);
         if (exitCode !== 0) {
-          console.log(chalk.red(`\nExiting with code ${exitCode} due to vulnerability severity threshold`));
+          console.log(
+            chalk.red(`\nExiting with code ${exitCode} due to vulnerability severity threshold`)
+          );
         }
         process.exit(exitCode);
       } else {
         console.log(chalk.green(`\nScan queued successfully!`));
         console.log(chalk.gray(`Use --wait flag to wait for completion`));
-        console.log(chalk.gray(`Or check status with: xeops-scan status -s ${scanResponse.scanId}`));
+        console.log(
+          chalk.gray(`Or check status with: xeops-scan status -s ${scanResponse.scanId}`)
+        );
       }
-
     } catch (error: any) {
       console.error(chalk.red('Error:'), error.message);
       if (error.details) {
@@ -121,7 +125,11 @@ program
   .description('Check scan status')
   .requiredOption('-s, --scan-id <id>', 'Scan ID')
   .requiredOption('-k, --api-key <key>', 'XeOps API key')
-  .option('-e, --endpoint <endpoint>', 'API endpoint', 'https://xeops-scanner-97758009309.europe-west1.run.app')
+  .option(
+    '-e, --endpoint <endpoint>',
+    'API endpoint',
+    'https://xeops-scanner-97758009309.europe-west1.run.app'
+  )
   .option('--json', 'Output as JSON', false)
   .action(async (options) => {
     const client = new XeOpsScannerClient({
@@ -144,7 +152,11 @@ program
   .requiredOption('-s, --scan-id <id>', 'Scan ID')
   .requiredOption('-k, --api-key <key>', 'XeOps API key')
   .requiredOption('-o, --output <path>', 'Output PDF path')
-  .option('-e, --endpoint <endpoint>', 'API endpoint', 'https://xeops-scanner-97758009309.europe-west1.run.app')
+  .option(
+    '-e, --endpoint <endpoint>',
+    'API endpoint',
+    'https://xeops-scanner-97758009309.europe-west1.run.app'
+  )
   .option('--validate-poc', 'Validate vulnerabilities with PoC', true)
   .action(async (options) => {
     const client = new XeOpsScannerClient({
@@ -154,10 +166,7 @@ program
 
     try {
       const spinner = ora('Generating PDF report...').start();
-      const pdfBuffer = await client.downloadPdfReport(
-        options.scanId,
-        options.validatePoc
-      );
+      const pdfBuffer = await client.downloadPdfReport(options.scanId, options.validatePoc);
       fs.writeFileSync(options.output, pdfBuffer);
       spinner.succeed(`PDF report saved to: ${options.output}`);
     } catch (error: any) {
@@ -170,7 +179,11 @@ program
   .command('usage')
   .description('Show usage statistics')
   .requiredOption('-k, --api-key <key>', 'XeOps API key')
-  .option('-e, --endpoint <endpoint>', 'API endpoint', 'https://xeops-scanner-97758009309.europe-west1.run.app')
+  .option(
+    '-e, --endpoint <endpoint>',
+    'API endpoint',
+    'https://xeops-scanner-97758009309.europe-west1.run.app'
+  )
   .action(async (options) => {
     const client = new XeOpsScannerClient({
       apiEndpoint: options.endpoint,

@@ -12,9 +12,15 @@ describe('CLI options validation', () => {
 
   it('throws for invalid timeout values', () => {
     expect(() => parseTimeoutSeconds('0')).toThrow('Timeout must be a positive integer in seconds');
-    expect(() => parseTimeoutSeconds('-1')).toThrow('Timeout must be a positive integer in seconds');
-    expect(() => parseTimeoutSeconds('12.5')).toThrow('Timeout must be a positive integer in seconds');
-    expect(() => parseTimeoutSeconds('abc')).toThrow('Timeout must be a positive integer in seconds');
+    expect(() => parseTimeoutSeconds('-1')).toThrow(
+      'Timeout must be a positive integer in seconds'
+    );
+    expect(() => parseTimeoutSeconds('12.5')).toThrow(
+      'Timeout must be a positive integer in seconds'
+    );
+    expect(() => parseTimeoutSeconds('abc')).toThrow(
+      'Timeout must be a positive integer in seconds'
+    );
   });
 
   it('validates scan options object', () => {
