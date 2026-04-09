@@ -8,6 +8,7 @@ import {
   WaitForScanOptions,
   ScannerError
 } from './types';
+import { buildAuthHeader } from './auth';
 
 /**
  * XeOps Security Scanner SDK Client
@@ -31,7 +32,7 @@ export class XeOpsScannerClient {
       timeout: this.config.timeout,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`,
+        'Authorization': buildAuthHeader(this.config.apiKey),
         'X-Client': 'scanner-sdk',
         'X-Client-Version': '1.0.0'
       }
@@ -173,7 +174,7 @@ export class XeOpsScannerClient {
     try {
       await this.client.get('/api/auth/verify');
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
