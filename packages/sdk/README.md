@@ -89,11 +89,26 @@ new XeOpsScannerClient(config: ScannerSDKConfig)
 
 **Config options:**
 - `apiEndpoint`: XeOps API endpoint URL
-- `apiKey`: Your API key
+- `apiKey?`: Your API key (sent in `X-API-Key` header)
+- `auth?`: Explicit auth config (`{ type: 'apiKey', apiKey }` or OAuth client credentials)
 - `timeout?`: Request timeout in ms (default: 60000)
 - `maxRetries?`: Max retry attempts (default: 3)
 - `retryDelay?`: Delay between retries in ms (default: 1000)
 - `debug?`: Enable debug logging (default: false)
+
+### OAuth client credentials
+
+```typescript
+const client = new XeOpsScannerClient({
+  apiEndpoint: process.env.XEOPS_API_ENDPOINT!,
+  auth: {
+    type: 'oauth',
+    clientId: process.env.XEOPS_CLIENT_ID!,
+    clientSecret: process.env.XEOPS_CLIENT_SECRET!,
+    tokenUrl: process.env.XEOPS_TOKEN_URL // optional, defaults to `${apiEndpoint}/oauth/token`
+  }
+});
+```
 
 #### Methods
 
