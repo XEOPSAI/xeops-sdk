@@ -6,6 +6,7 @@ import ora from 'ora';
 import { XeOpsScannerClient, ScanResult } from '@xeopsai/scanner-sdk';
 import * as fs from 'fs';
 import { computeExitCode, parseTimeoutSeconds } from './options';
+import { runCiScan, CiOutputFormat } from './ci';
 
 const program = new Command();
 
@@ -27,6 +28,8 @@ program
   .option('--fail-on-high', 'Exit with code 1 if high/critical vulnerabilities found', false)
   .option('--fail-on-medium', 'Exit with code 1 if medium+ vulnerabilities found', false)
   .option('--json', 'Output results as JSON', false)
+  .option('--ci', 'Run in CI mode with pass/fail exit code handling', false)
+  .option('--format <format>', 'Output format in CI mode: table|json|sarif', 'table')
   .action(async (options) => {
     const client = new XeOpsScannerClient({
       apiEndpoint: options.endpoint,
@@ -43,6 +46,20 @@ program
         process.exit(1);
       }
       spinner.succeed('API key verified');
+
+      if (options.ci) {
+        const ciSpinner = ora('Running CI scan...').start();
+        const summary = await runCiScan(client, {
+          url: options.url,
+          timeoutSeconds: parseTimeoutSeconds(options.timeout),
+          failOnHigh: options.failOnHigh,
+          failOnMedium: options.failOnMedium,
+          outputFormat: parseCiFormat(options.format)
+        });
+        ciSpinner.succeed(`CI scan completed: ${summary.scanId}`);
+        console.log(summary.output);
+        process.exit(summary.exitCode);
+      }
 
       // Start scan
       spinner.start('Starting security scan...');
@@ -233,6 +250,14 @@ function getExitCode(
   }
 ): number {
   return computeExitCode(result.metadata, options);
+}
+
+function parseCiFormat(format: string): CiOutputFormat {
+  if (format === 'json' || format === 'sarif' || format === 'table') {
+    return format;
+  }
+
+  throw new Error('Invalid --format value. Allowed: table|json|sarif');
 }
 
 program.parse(process.argv);
