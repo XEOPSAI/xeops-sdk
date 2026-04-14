@@ -1,5 +1,5 @@
 {
-  "name": "@xeopsai/scanner-sdk",
+  "name": "@xeopsai/sdk",
   "version": "1.0.1",
   "description": "XeOps Security Scanner SDK for CI/CD integration",
   "main": "dist/index.js",
