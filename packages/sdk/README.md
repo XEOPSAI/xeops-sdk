@@ -1,11 +1,11 @@
-# @xeops/scanner-sdk
+# @xeopsai/sdk
 
 XeOps Security Scanner SDK for CI/CD integration and programmatic access.
 
 ## Installation
 
 ```bash
-npm install @xeops/scanner-sdk
+npm install @xeopsai/sdk
 ```
 
 ## Usage
@@ -13,7 +13,7 @@ npm install @xeops/scanner-sdk
 ### Basic Example
 
 ```typescript
-import { XeOpsScannerClient } from '@xeops/scanner-sdk';
+import { XeOpsScannerClient } from '@xeopsai/sdk';
 
 const client = new XeOpsScannerClient({
   apiEndpoint: 'https://xeops-scanner-97758009309.europe-west1.run.app',
@@ -41,7 +41,7 @@ console.log('Vulnerabilities found:', result.vulnerabilitiesFound);
 ### CI/CD Integration
 
 ```typescript
-import { XeOpsScannerClient } from '@xeops/scanner-sdk';
+import { XeOpsScannerClient } from '@xeopsai/sdk';
 import * as fs from 'fs';
 
 const client = new XeOpsScannerClient({

@@ -11,7 +11,7 @@ security_scan:
     FAIL_ON_HIGH: "true"
 
   before_script:
-    - npm install -g @xeops/scanner-cli
+    - npm install -g @xeopsai/cli
 
   script:
     # Run security scan

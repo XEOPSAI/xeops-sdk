@@ -9,14 +9,14 @@
 ```
 xeops-sdk/
 ├── packages/
-│   ├── sdk/                  # @xeopsai/scanner-sdk
+│   ├── sdk/                  # @xeopsai/sdk
 │   │   ├── src/
 │   │   │   ├── index.ts      # Exports + createClient() factory
 │   │   │   ├── client.ts     # XeOpsScannerClient class (all methods)
 │   │   │   └── types.ts      # TypeScript types + ScannerError class
 │   │   ├── examples/         # CI/CD examples (GitHub Actions, GitLab CI, Jenkins)
 │   │   └── package.json
-│   └── cli/                  # @xeopsai/scanner-cli
+│   └── cli/                  # @xeopsai/cli
 │       ├── src/
 │       │   └── cli.ts        # Single-file CLI (Commander.js + chalk + ora)
 │       └── package.json
@@ -29,7 +29,7 @@ xeops-sdk/
 
 ## SDK (`packages/sdk/`)
 
-Package: `@xeopsai/scanner-sdk` — Axios-based HTTP client.
+Package: `@xeopsai/sdk` — Axios-based HTTP client.
 
 ### Key Class: `XeOpsScannerClient`
 
@@ -47,7 +47,7 @@ All methods are in `client.ts` (no separate resource files):
 ### Config
 
 ```typescript
-import { XeOpsScannerClient } from '@xeopsai/scanner-sdk';
+import { XeOpsScannerClient } from '@xeopsai/sdk';
 
 const client = new XeOpsScannerClient({
   apiEndpoint: 'https://api.xeops.ai',
@@ -60,7 +60,7 @@ const client = new XeOpsScannerClient({
 
 ## CLI (`packages/cli/`)
 
-Package: `@xeopsai/scanner-cli` — Binary: `xeops-scan`
+Package: `@xeopsai/cli` — Binary: `xeops-scan`
 
 Single command `scan` with options:
 - `-u, --url <url>` — Target URL (required)
@@ -71,7 +71,7 @@ Single command `scan` with options:
 - `--fail-on-high` / `--fail-on-medium` — CI quality gates
 - `--json` — JSON output
 
-Dependencies: `@xeopsai/scanner-sdk`, `commander`, `chalk`, `ora`
+Dependencies: `@xeopsai/sdk`, `commander`, `chalk`, `ora`
 
 ## Development Commands
 

@@ -1,17 +1,17 @@
-# @xeops/scanner-cli
+# @xeopsai/cli
 
 XeOps Security Scanner CLI for CI/CD pipelines.
 
 ## Installation
 
 ```bash
-npm install -g @xeops/scanner-cli
+npm install -g @xeopsai/cli
 ```
 
 Or use with npx:
 
 ```bash
-npx @xeops/scanner-cli scan --url https://example.com --api-key YOUR_KEY
+npx @xeopsai/cli scan --url https://example.com --api-key YOUR_KEY
 ```
 
 ## Usage
@@ -80,7 +80,7 @@ jobs:
     steps:
       - name: Security Scan
         run: |
-          npx @xeops/scanner-cli scan \
+          npx @xeopsai/cli scan \
             --url https://staging.example.com \
             --api-key ${{ secrets.XEOPS_API_KEY }} \
             --wait \
@@ -101,7 +101,7 @@ jobs:
 security_scan:
   stage: test
   script:
-    - npx @xeops/scanner-cli scan
+    - npx @xeopsai/cli scan
         --url https://staging.example.com
         --api-key $XEOPS_API_KEY
         --wait
@@ -127,7 +127,7 @@ pipeline {
         stage('Security Scan') {
             steps {
                 sh '''
-                    npx @xeops/scanner-cli scan \
+                    npx @xeopsai/cli scan \
                         --url https://staging.example.com \
                         --api-key $XEOPS_API_KEY \
                         --wait \
@@ -159,7 +159,7 @@ jobs:
       - run:
           name: Security Scan
           command: |
-            npx @xeops/scanner-cli scan \
+            npx @xeopsai/cli scan \
               --url https://staging.example.com \
               --api-key $XEOPS_API_KEY \
               --wait \

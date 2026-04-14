@@ -1,0 +1,54 @@
+name: Publish npm packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install and build SDK
+        working-directory: packages/sdk
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish @xeopsai/sdk
+        working-directory: packages/sdk
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Prepare CLI dependency version
+        working-directory: packages/cli
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm pkg set dependencies."@xeopsai/sdk"="^${VERSION}"
+
+      - name: Install and build CLI
+        working-directory: packages/cli
+        run: |
+          npm install
+          npm run build
+
+      - name: Publish @xeopsai/cli
+        working-directory: packages/cli
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
