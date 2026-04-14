@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { XeOpsScannerClient, ScanResult } from '@xeopsai/scanner-sdk';
 import * as fs from 'fs';
+import { computeExitCode, parseTimeoutSeconds } from './options';
 
 const program = new Command();
 
@@ -64,7 +65,7 @@ program
         result = await client.waitForScanCompletion(
           scanResponse.scanId,
           {
-            timeout: parseInt(options.timeout) * 1000,
+            timeout: parseTimeoutSeconds(options.timeout) * 1000,
             pollingInterval: 5000,
             onProgress: (scanResult) => {
               const progress = scanResult.progress || 0;
@@ -224,24 +225,14 @@ function getStatusColor(status: string): string {
   }
 }
 
-function getExitCode(result: ScanResult, options: any): number {
-  if (!result.metadata) {
-    return 0;
+function getExitCode(
+  result: ScanResult,
+  options: {
+    failOnHigh?: boolean;
+    failOnMedium?: boolean;
   }
-
-  const critical = result.metadata.criticalCount || 0;
-  const high = result.metadata.highCount || 0;
-  const medium = result.metadata.mediumCount || 0;
-
-  if (options.failOnHigh && (critical > 0 || high > 0)) {
-    return 1;
-  }
-
-  if (options.failOnMedium && (critical > 0 || high > 0 || medium > 0)) {
-    return 1;
-  }
-
-  return 0;
+): number {
+  return computeExitCode(result.metadata, options);
 }
 
 program.parse(process.argv);
