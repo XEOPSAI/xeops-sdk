@@ -6,6 +6,7 @@ import ora from 'ora';
 import { XeOpsScannerClient, ScanResult } from '@xeopsai/scanner-sdk';
 import * as fs from 'fs';
 import { computeExitCode, parseTimeoutSeconds } from './options';
+import { computeCiExitCode, parseCiOutputFormat, runCiScan } from './ci';
 
 const program = new Command();
 
@@ -26,6 +27,8 @@ program
   .option('--validate-poc', 'Validate vulnerabilities with PoC', true)
   .option('--fail-on-high', 'Exit with code 1 if high/critical vulnerabilities found', false)
   .option('--fail-on-medium', 'Exit with code 1 if medium+ vulnerabilities found', false)
+  .option('--ci', 'CI mode with completion wait and threshold-based exit code', false)
+  .option('--format <format>', 'CI output format: json|sarif|table', 'table')
   .option('--json', 'Output results as JSON', false)
   .action(async (options) => {
     const client = new XeOpsScannerClient({
@@ -43,6 +46,26 @@ program
         process.exit(1);
       }
       spinner.succeed('API key verified');
+
+      if (options.ci) {
+        const result = await runCiScan(client, {
+          url: options.url,
+          timeoutSeconds: options.timeout,
+          failOnHigh: options.failOnHigh,
+          failOnMedium: options.failOnMedium,
+          format: parseCiOutputFormat(options.format)
+        });
+
+        displayResults(result, options.json || options.format === 'json');
+        const exitCode = computeCiExitCode(result, {
+          url: options.url,
+          timeoutSeconds: options.timeout,
+          failOnHigh: options.failOnHigh,
+          failOnMedium: options.failOnMedium,
+          format: parseCiOutputFormat(options.format)
+        });
+        process.exit(exitCode);
+      }
 
       // Start scan
       spinner.start('Starting security scan...');
