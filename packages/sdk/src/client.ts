@@ -208,7 +208,7 @@ export class XeOpsScannerClient {
     try {
       await this.client.get('/api/auth/verify');
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }

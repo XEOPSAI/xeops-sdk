@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { XeOpsScannerClient, ScanResult } from '@xeopsai/scanner-sdk';
 import * as fs from 'fs';
+import { parseTimeoutSeconds, validateScanCommandOptions } from './options';
 
 const program = new Command();
 
@@ -27,6 +28,8 @@ program
   .option('--fail-on-medium', 'Exit with code 1 if medium+ vulnerabilities found', false)
   .option('--json', 'Output results as JSON', false)
   .action(async (options) => {
+    validateScanCommandOptions(options);
+
     const client = new XeOpsScannerClient({
       apiEndpoint: options.endpoint,
       apiKey: options.apiKey,
@@ -64,7 +67,7 @@ program
         result = await client.waitForScanCompletion(
           scanResponse.scanId,
           {
-            timeout: parseInt(options.timeout) * 1000,
+            timeout: parseTimeoutSeconds(options.timeout) * 1000,
             pollingInterval: 5000,
             onProgress: (scanResult) => {
               const progress = scanResult.progress || 0;
