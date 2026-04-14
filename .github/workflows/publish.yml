@@ -1,0 +1,50 @@
+name: Publish npm packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - packageDir: packages/sdk
+            packageName: '@xeopsai/sdk'
+          - packageDir: packages/cli
+            packageName: '@xeopsai/cli'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ matrix.packageDir }}
+
+      - name: Build package
+        run: npm run build
+        working-directory: ${{ matrix.packageDir }}
+
+      - name: Verify package name
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          if [ "$NAME" != "${{ matrix.packageName }}" ]; then
+            echo "Expected package name ${{ matrix.packageName }} but got $NAME"
+            exit 1
+          fi
+        working-directory: ${{ matrix.packageDir }}
+
+      - name: Publish package
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: ${{ matrix.packageDir }}
