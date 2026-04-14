@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosError } from 'axios';
+import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
 import {
   ScanRequest,
   ScanResponse,
@@ -19,6 +19,7 @@ import {
   resolveAuthConfig,
   buildApiKeyHeaders
 } from './auth';
+import { ClientRateLimiter } from './rate_limiter';
 
 /**
  * XeOps Security Scanner SDK Client
@@ -34,9 +35,11 @@ export class XeOpsScannerClient {
   };
   private auth: ScannerAuthConfig;
   private oauthProvider?: OAuthClientCredentialsProvider;
+  private rateLimiter: ClientRateLimiter;
 
   constructor(config: ScannerSDKConfig) {
     this.auth = resolveAuthConfig(config);
+    this.rateLimiter = new ClientRateLimiter();
 
     this.config = {
       timeout: config.timeout || 60000,
@@ -87,15 +90,23 @@ export class XeOpsScannerClient {
       );
     }
 
-    // Response interceptor for error handling
+    // Response interceptor for error handling + rate-limit retries
     this.client.interceptors.response.use(
       (response) => {
+        this.rateLimiter.updateFromHeaders(response.headers);
         if (this.config.debug) {
           console.log(`[XeOps SDK] Response: ${response.status}`);
         }
         return response;
       },
-      (error) => this.handleError(error)
+      async (error) => {
+        const retriedResponse = await this.retryIfNeeded(error);
+        if (retriedResponse) {
+          return retriedResponse;
+        }
+
+        return this.handleError(error);
+      }
     );
   }
 
@@ -409,6 +420,22 @@ export class XeOpsScannerClient {
     } catch {
       return null;
     }
+  }
+
+  private async retryIfNeeded(error: AxiosError): Promise<unknown | null> {
+    this.rateLimiter.updateFromHeaders(error.response?.headers);
+
+    if (!this.rateLimiter.shouldRetry(error, this.config.maxRetries)) {
+      return null;
+    }
+
+    const nextConfig = this.rateLimiter.nextRetryConfig(error.config);
+    const retryState = (nextConfig as AxiosRequestConfig & { __xeopsRetryState?: { attempt: number } }).__xeopsRetryState;
+    const attempt = retryState?.attempt ?? 1;
+    const delayMs = this.rateLimiter.getDelayMs(attempt);
+
+    await this.sleep(delayMs);
+    return this.client.request(nextConfig);
   }
 
   /**
