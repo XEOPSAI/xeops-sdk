@@ -19,6 +19,12 @@ import {
   resolveAuthConfig,
   buildApiKeyHeaders
 } from './auth';
+import {
+  ClientRateLimiter,
+  getRetryCount,
+  setRetryCount,
+  shouldRetryStatus
+} from './rate_limiter';
 
 /**
  * XeOps Security Scanner SDK Client
@@ -34,6 +40,7 @@ export class XeOpsScannerClient {
   };
   private auth: ScannerAuthConfig;
   private oauthProvider?: OAuthClientCredentialsProvider;
+  private rateLimiter: ClientRateLimiter;
 
   constructor(config: ScannerSDKConfig) {
     this.auth = resolveAuthConfig(config);
@@ -45,6 +52,8 @@ export class XeOpsScannerClient {
       debug: config.debug || false,
       ...config
     };
+
+    this.rateLimiter = new ClientRateLimiter();
 
     const baseHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -68,6 +77,11 @@ export class XeOpsScannerClient {
       headers: baseHeaders
     });
 
+    this.client.interceptors.request.use(async (requestConfig) => {
+      await this.rateLimiter.beforeRequest();
+      return requestConfig;
+    });
+
     if (this.auth.type === 'oauth') {
       this.client.interceptors.request.use(async (requestConfig) => {
         const token = await this.oauthProvider!.getAccessToken();
@@ -87,15 +101,25 @@ export class XeOpsScannerClient {
       );
     }
 
-    // Response interceptor for error handling
+    // Response interceptor for error handling and retries
     this.client.interceptors.response.use(
       (response) => {
+        this.rateLimiter.captureHeaders(response.headers);
+        this.rateLimiter.resetRetryCounter();
+
         if (this.config.debug) {
           console.log(`[XeOps SDK] Response: ${response.status}`);
         }
         return response;
       },
-      (error) => this.handleError(error)
+      async (error) => {
+        const retryResponse = await this.retryRequestIfEligible(error);
+        if (retryResponse) {
+          return retryResponse;
+        }
+
+        return this.handleError(error);
+      }
     );
   }
 
@@ -409,6 +433,34 @@ export class XeOpsScannerClient {
     } catch {
       return null;
     }
+  }
+
+  private async retryRequestIfEligible(error: any): Promise<unknown | null> {
+    if (!axios.isAxiosError(error)) {
+      return null;
+    }
+
+    const requestConfig = error.config;
+    if (!requestConfig) {
+      return null;
+    }
+
+    const status = error.response?.status;
+    if (!shouldRetryStatus(status)) {
+      return null;
+    }
+
+    const currentRetries = getRetryCount(requestConfig);
+    if (currentRetries >= this.config.maxRetries) {
+      return null;
+    }
+
+    setRetryCount(requestConfig, currentRetries + 1);
+
+    const delay = this.rateLimiter.nextRetryDelay(error.response?.headers ?? {});
+    await this.sleep(delay);
+
+    return this.client.request(requestConfig);
   }
 
   /**

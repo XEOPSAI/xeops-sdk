@@ -8,6 +8,7 @@ export * from './types';
 export * from './auth';
 export * from './sse';
 export * from './webhooks';
+export * from './rate_limiter';
 
 // Export convenience factory function
 import { XeOpsScannerClient } from './client';
