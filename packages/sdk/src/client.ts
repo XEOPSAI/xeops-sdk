@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosError } from 'axios';
+import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import {
   ScanRequest,
   ScanResponse,
@@ -19,6 +19,7 @@ import {
   resolveAuthConfig,
   buildApiKeyHeaders
 } from './auth';
+import { ClientRateLimiter } from './rate_limiter';
 
 /**
  * XeOps Security Scanner SDK Client
@@ -34,6 +35,7 @@ export class XeOpsScannerClient {
   };
   private auth: ScannerAuthConfig;
   private oauthProvider?: OAuthClientCredentialsProvider;
+  private readonly rateLimiter: ClientRateLimiter;
 
   constructor(config: ScannerSDKConfig) {
     this.auth = resolveAuthConfig(config);
@@ -62,10 +64,17 @@ export class XeOpsScannerClient {
       );
     }
 
+    this.rateLimiter = new ClientRateLimiter({ maxRetries: this.config.maxRetries });
+
     this.client = axios.create({
       baseURL: this.config.apiEndpoint,
       timeout: this.config.timeout,
       headers: baseHeaders
+    });
+
+    this.client.interceptors.request.use(async (requestConfig) => {
+      await this.rateLimiter.waitIfNeeded((ms) => this.sleep(ms));
+      return requestConfig;
     });
 
     if (this.auth.type === 'oauth') {
@@ -90,12 +99,13 @@ export class XeOpsScannerClient {
     // Response interceptor for error handling
     this.client.interceptors.response.use(
       (response) => {
+        this.rateLimiter.updateFromHeaders(response.headers as Record<string, unknown>);
         if (this.config.debug) {
           console.log(`[XeOps SDK] Response: ${response.status}`);
         }
         return response;
       },
-      (error) => this.handleError(error)
+      async (error) => this.handleError(error)
     );
   }
 
@@ -414,23 +424,34 @@ export class XeOpsScannerClient {
   /**
    * Handle axios errors
    */
-  private handleError(error: any): Promise<never> {
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError;
-
-      if (axiosError.response) {
-        // Server responded with error
-        const status = axiosError.response.status;
-        const message = (axiosError.response.data as any)?.message || axiosError.message;
-
-        return Promise.reject(new ScannerError(message, status, axiosError.response.data));
-      } else if (axiosError.request) {
-        // Request made but no response
-        return Promise.reject(new ScannerError('Network error: No response from server'));
-      }
+  private async handleError(error: unknown): Promise<unknown> {
+    if (!axios.isAxiosError(error)) {
+      return Promise.reject(error);
     }
 
-    return Promise.reject(error);
+    const axiosError = error as AxiosError;
+    const status = axiosError.response?.status;
+    const retryAfter = Number(axiosError.response?.headers?.['retry-after']);
+    const requestConfig = axiosError.config as (InternalAxiosRequestConfig & { _retryAttempt?: number }) | undefined;
+    const attempt = requestConfig?._retryAttempt ?? 0;
+
+    if (requestConfig && this.rateLimiter.shouldRetry(status, attempt)) {
+      const delay = this.rateLimiter.computeDelayMs(attempt, Number.isNaN(retryAfter) ? undefined : retryAfter);
+      requestConfig._retryAttempt = attempt + 1;
+      await this.sleep(delay);
+      return this.client.request(requestConfig);
+    }
+
+    if (axiosError.response) {
+      const message = (axiosError.response.data as any)?.message || axiosError.message;
+      return Promise.reject(new ScannerError(message, status, axiosError.response.data));
+    }
+
+    if (axiosError.request) {
+      return Promise.reject(new ScannerError('Network error: No response from server'));
+    }
+
+    return Promise.reject(axiosError);
   }
 
   /**
