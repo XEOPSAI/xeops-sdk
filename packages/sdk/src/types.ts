@@ -115,7 +115,10 @@ export interface ScanLiveEventHandlers {
 
 export interface LiveScanOptions {
   /**
-   * Explicit transport preference. "auto" currently resolves to WebSocket.
+   * Explicit transport preference.
+   * - auto: WebSocket first, falls back to EventSource (SSE)
+   * - ws: WebSocket only
+   * - sse: EventSource only
    */
   transport?: 'auto' | 'ws' | 'sse';
 }

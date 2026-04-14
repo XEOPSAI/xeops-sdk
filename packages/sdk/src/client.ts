@@ -140,15 +140,25 @@ export class XeOpsScannerClient {
    */
   async getFindings(scanId: string): Promise<ScanFinding[]> {
     try {
-      const response = await this.client.get<ScanFinding[]>(`/api/scans/${scanId}/findings`);
-      return response.data;
+      const response = await this.client.get<ScanFinding[] | { findings?: ScanFinding[] }>(`/api/scans/${scanId}/findings`);
+      const data = response.data;
+
+      if (Array.isArray(data)) {
+        return data;
+      }
+
+      if (data && Array.isArray(data.findings)) {
+        return data.findings;
+      }
+
+      return [];
     } catch (error) {
       throw this.formatError('Failed to get scan findings', error);
     }
   }
 
   /**
-   * Subscribe to live scan events over WebSocket.
+   * Subscribe to live scan events over WebSocket or EventSource (SSE).
    * Returns a cleanup function to close the connection.
    */
   subscribeToScanEvents(
@@ -158,47 +168,82 @@ export class XeOpsScannerClient {
   ): () => void {
     const transport = options.transport || 'auto';
 
-    if (transport === 'sse') {
-      throw new ScannerError('SSE transport is not implemented yet in this SDK version');
+    if (transport === 'ws' || transport === 'auto') {
+      const WS = (globalThis as any).WebSocket as
+        | (new (url: string) => {
+            onopen: (() => void) | null;
+            onerror: ((event: unknown) => void) | null;
+            onmessage: ((event: { data: string }) => void) | null;
+            onclose: (() => void) | null;
+            close: () => void;
+          })
+        | undefined;
+
+      if (WS) {
+        const socket = new WS(this.buildLiveWsUrl(scanId));
+
+        socket.onopen = () => {
+          handlers.onOpen?.();
+        };
+
+        socket.onerror = () => {
+          handlers.onError?.(new ScannerError('Live scan WebSocket connection error'));
+        };
+
+        socket.onmessage = (event) => {
+          const parsed = this.parseLiveEvent(event.data);
+          if (parsed) {
+            handlers.onEvent(parsed);
+          }
+        };
+
+        socket.onclose = () => {
+          handlers.onClose?.();
+        };
+
+        return () => {
+          socket.close();
+        };
+      }
+
+      if (transport === 'ws') {
+        throw new ScannerError('WebSocket is not available in this runtime');
+      }
     }
 
-    const WS = (globalThis as any).WebSocket as
+    const ES = (globalThis as any).EventSource as
       | (new (url: string) => {
           onopen: (() => void) | null;
           onerror: ((event: unknown) => void) | null;
           onmessage: ((event: { data: string }) => void) | null;
-          onclose: (() => void) | null;
           close: () => void;
         })
       | undefined;
 
-    if (!WS) {
-      throw new ScannerError('WebSocket is not available in this runtime');
+    if (!ES) {
+      throw new ScannerError('No live transport available (WebSocket/EventSource missing)');
     }
 
-    const socket = new WS(this.buildLiveWsUrl(scanId));
+    const source = new ES(this.buildLiveSseUrl(scanId));
 
-    socket.onopen = () => {
+    source.onopen = () => {
       handlers.onOpen?.();
     };
 
-    socket.onerror = () => {
-      handlers.onError?.(new ScannerError('Live scan WebSocket connection error'));
+    source.onerror = () => {
+      handlers.onError?.(new ScannerError('Live scan EventSource connection error'));
     };
 
-    socket.onmessage = (event) => {
+    source.onmessage = (event) => {
       const parsed = this.parseLiveEvent(event.data);
       if (parsed) {
         handlers.onEvent(parsed);
       }
     };
 
-    socket.onclose = () => {
-      handlers.onClose?.();
-    };
-
     return () => {
-      socket.close();
+      source.close();
+      handlers.onClose?.();
     };
   }
 
@@ -342,6 +387,11 @@ export class XeOpsScannerClient {
     const endpoint = this.config.apiEndpoint.replace(/\/$/, '');
     const wsBase = endpoint.replace(/^http/i, 'ws');
     return `${wsBase}/api/scans/${scanId}/live`;
+  }
+
+  private buildLiveSseUrl(scanId: string): string {
+    const endpoint = this.config.apiEndpoint.replace(/\/$/, '');
+    return `${endpoint}/api/scans/${scanId}/live`;
   }
 
   private parseLiveEvent(raw: string): ScanLiveEvent | null {
