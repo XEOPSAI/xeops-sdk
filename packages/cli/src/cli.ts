@@ -7,6 +7,7 @@ import { XeOpsScannerClient, ScanResult } from '@xeopsai/sdk';
 import * as fs from 'fs';
 import { computeExitCode, parseTimeoutSeconds } from './options';
 import { computeCiExitCode, parseCiOutputFormat, runCiScan } from './ci';
+import { runInteractiveScan } from './interactive';
 
 const program = new Command();
 
@@ -30,6 +31,7 @@ program
   .option('--ci', 'CI mode with completion wait and threshold-based exit code', false)
   .option('--format <format>', 'CI output format: json|sarif|table', 'table')
   .option('--json', 'Output results as JSON', false)
+  .option('--interactive', 'Run interactive terminal mode', false)
   .action(async (options) => {
     const client = new XeOpsScannerClient({
       apiEndpoint: options.endpoint,
@@ -46,6 +48,11 @@ program
         process.exit(1);
       }
       spinner.succeed('API key verified');
+
+      if (options.interactive) {
+        const interactiveCode = await runInteractiveScan(client, options.url);
+        process.exit(interactiveCode);
+      }
 
       if (options.ci) {
         const result = await runCiScan(client, {
@@ -258,4 +265,15 @@ function getExitCode(
   return computeExitCode(result.metadata, options);
 }
 
-program.parse(process.argv);
+program.parse(normalizeCliArguments(process.argv));
+
+function normalizeCliArguments(argv: string[]): string[] {
+  const hasSubcommand = ['scan', 'status', 'report', 'usage'].includes(argv[2] || '');
+  const needsScanShim = !hasSubcommand && argv.includes('--interactive');
+
+  if (!needsScanShim) {
+    return argv;
+  }
+
+  return [argv[0], argv[1], 'scan', ...argv.slice(2)];
+}
