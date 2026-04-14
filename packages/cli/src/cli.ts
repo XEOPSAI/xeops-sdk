@@ -9,6 +9,13 @@ import { computeExitCode, parseTimeoutSeconds } from './options';
 import { computeCiExitCode, parseCiOutputFormat, runCiScan } from './ci';
 import { runInteractiveScan } from './interactive';
 
+const COMMAND_INDEX = 2;
+const ARGUMENTS_START_INDEX = 2;
+const INDENTATION_SPACES = 2;
+const SCAN_POLLING_INTERVAL_MS = 5_000;
+const MILLISECONDS_IN_SECOND = 1_000;
+const SUPPORTED_SUBCOMMANDS = ['scan', 'status', 'report', 'usage'] as const;
+
 const program = new Command();
 
 program
@@ -95,8 +102,8 @@ program
         result = await client.waitForScanCompletion(
           scanResponse.scanId,
           {
-            timeout: parseTimeoutSeconds(options.timeout) * 1000,
-            pollingInterval: 5000,
+            timeout: parseTimeoutSeconds(options.timeout) * MILLISECONDS_IN_SECOND,
+            pollingInterval: SCAN_POLLING_INTERVAL_MS,
             onProgress: (scanResult) => {
               const progress = scanResult.progress || 0;
               const currentTest = scanResult.currentTest || 'Running...';
@@ -138,7 +145,7 @@ program
     } catch (error: any) {
       console.error(chalk.red('Error:'), error.message);
       if (error.details) {
-        console.error(chalk.gray(JSON.stringify(error.details, null, 2)));
+        console.error(chalk.gray(JSON.stringify(error.details, null, INDENTATION_SPACES)));
       }
       process.exit(1);
     }
@@ -268,12 +275,13 @@ function getExitCode(
 program.parse(normalizeCliArguments(process.argv));
 
 function normalizeCliArguments(argv: string[]): string[] {
-  const hasSubcommand = ['scan', 'status', 'report', 'usage'].includes(argv[2] || '');
+  const commandCandidate = argv[COMMAND_INDEX] || '';
+  const hasSubcommand = SUPPORTED_SUBCOMMANDS.includes(commandCandidate as (typeof SUPPORTED_SUBCOMMANDS)[number]);
   const needsScanShim = !hasSubcommand && argv.includes('--interactive');
 
   if (!needsScanShim) {
     return argv;
   }
 
-  return [argv[0], argv[1], 'scan', ...argv.slice(2)];
+  return [argv[0], argv[1], 'scan', ...argv.slice(ARGUMENTS_START_INDEX)];
 }
