@@ -1,5 +1,5 @@
 {
-  "name": "@xeopsai/scanner-cli",
+  "name": "@xeopsai/cli",
   "version": "1.0.1",
   "description": "XeOps Security Scanner CLI for CI/CD pipelines",
   "main": "dist/index.js",
@@ -28,7 +28,7 @@
     "directory": "packages/scanner-cli"
   },
   "dependencies": {
-    "@xeopsai/scanner-sdk": "^1.0.0",
+    "@xeopsai/sdk": "file:../sdk",
     "commander": "^11.0.0",
     "chalk": "^4.1.2",
     "ora": "^5.4.1"
