@@ -1,78 +1,126 @@
 import readline from 'node:readline';
 import { XeOpsScannerClient, ScanLiveEvent, ScanResult } from '@xeopsai/sdk';
+import { parseTimeoutSeconds } from './options';
 
-const SUPPORTED_COMMANDS = ['focus', 'skip', 'pause', 'resume'] as const;
+const INTERACTIVE_COMMANDS = ['focus', 'skip', 'pause', 'resume', 'stop'] as const;
+
+export type InteractiveCommandType = (typeof INTERACTIVE_COMMANDS)[number];
+
+export interface InteractiveCommand {
+  type: InteractiveCommandType;
+  value?: string;
+}
 
 export interface InteractiveScanOptions {
   url: string;
-  onOutput?: (line: string) => void;
-  onCommand?: (command: string, args: string[]) => Promise<void>;
-  createInterface?: typeof readline.createInterface;
+  timeoutSeconds: string;
+}
+
+export interface InteractiveIo {
+  print: (message: string) => void;
+  readLineFactory: () => readline.Interface;
 }
 
 /**
- * Run an interactive scan session with live events and command input.
+ * Parse an interactive command entered by the user.
+ */
+export function parseInteractiveCommand(input: string): InteractiveCommand | null {
+  const normalized = input.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const [command, ...rest] = normalized.split(/\s+/);
+  if (!INTERACTIVE_COMMANDS.includes(command as InteractiveCommandType)) {
+    return null;
+  }
+
+  const value = rest.join(' ').trim();
+  if (command === 'focus' && !value) {
+    return null;
+  }
+
+  return value ? { type: command as InteractiveCommandType, value } : { type: command as InteractiveCommandType };
+}
+
+/**
+ * Build a user-friendly text from the AttackerState payload.
+ */
+export function formatAttackerProgress(payload: Record<string, unknown>): string {
+  const stage = typeof payload.phase === 'string' ? payload.phase : 'unknown';
+  const hypothesisCount = Number(payload.hypothesesTested ?? 0);
+  const findingsCount = Number(payload.findingsConfirmed ?? 0);
+  return `AttackerState: phase=${stage} | hypotheses=${hypothesisCount} | confirmed=${findingsCount}`;
+}
+
+/**
+ * Render one live scan event for the interactive view.
+ */
+export function renderLiveEvent(event: ScanLiveEvent): string {
+  if (event.type === 'attacker_escalation') {
+    return formatAttackerProgress(event.payload);
+  }
+
+  if (event.type === 'finding') {
+    const title = String(event.payload.title ?? 'finding');
+    const severity = String(event.payload.severity ?? 'unknown');
+    return `Finding: [${severity}] ${title}`;
+  }
+
+  return `Event: ${event.type}`;
+}
+
+function sendInteractiveCommand(
+  client: XeOpsScannerClient,
+  scanId: string,
+  command: InteractiveCommand
+): Promise<void> {
+  const callable = (client as unknown as { sendLiveCommand?: (id: string, payload: InteractiveCommand) => Promise<void> }).sendLiveCommand;
+  if (!callable) {
+    return Promise.resolve();
+  }
+
+  return callable(scanId, command);
+}
+
+/**
+ * Run a scan in interactive mode: live events + command input.
  */
 export async function runInteractiveScan(
   client: XeOpsScannerClient,
-  options: InteractiveScanOptions
+  options: InteractiveScanOptions,
+  io: InteractiveIo
 ): Promise<ScanResult> {
-  const output = options.onOutput ?? ((line: string) => process.stdout.write(`${line}\n`));
-  const createInterface = options.createInterface ?? readline.createInterface;
   const scan = await client.startScan({ targetUrl: options.url });
-  output(`Scan started: ${scan.scanId}`);
+  io.print(`Interactive scan started: ${scan.scanId}`);
 
-  const closeLiveFeed = client.subscribeToScanEvents(scan.scanId, {
-    onEvent: (event) => output(formatLiveEvent(event)),
-    onError: (error) => output(`Live stream error: ${error.message}`),
-    onOpen: () => output('Live stream connected.')
+  const closeLiveStream = client.subscribeToScanEvents(scan.scanId, {
+    onEvent: (event) => {
+      io.print(renderLiveEvent(event));
+    },
+    onError: (error) => {
+      io.print(`Live stream error: ${error.message}`);
+    }
   });
 
-  const terminal = createInterface({ input: process.stdin, output: process.stdout });
-  terminal.on('line', async (line: string) => {
-    await handleCommand(line, output, options.onCommand);
+  const lineReader = io.readLineFactory();
+  lineReader.on('line', async (line) => {
+    const parsed = parseInteractiveCommand(line);
+    if (!parsed) {
+      io.print('Invalid command. Allowed: focus <target>, skip, pause, resume, stop');
+      return;
+    }
+
+    await sendInteractiveCommand(client, scan.scanId, parsed);
+    io.print(`Command sent: ${parsed.type}${parsed.value ? ` ${parsed.value}` : ''}`);
   });
 
-  try {
-    const result = await client.waitForScanCompletion(scan.scanId, {
-      onProgress: (progressResult) => output(formatProgress(progressResult))
-    });
-    output(`Scan finished with status: ${result.status}`);
-    return result;
-  } finally {
-    closeLiveFeed();
-    terminal.close();
-  }
-}
+  const result = await client.waitForScanCompletion(scan.scanId, {
+    timeout: parseTimeoutSeconds(options.timeoutSeconds) * 1000,
+    pollingInterval: 5000
+  });
 
-function formatProgress(result: ScanResult): string {
-  const step = result.currentTest ?? 'running';
-  return `Progress ${result.progress}% | ${step} | vulnerabilities=${result.vulnerabilitiesFound}`;
-}
-
-function formatLiveEvent(event: ScanLiveEvent): string {
-  return `[${event.type}] ${JSON.stringify(event.payload)}`;
-}
-
-async function handleCommand(
-  rawLine: string,
-  output: (line: string) => void,
-  onCommand?: (command: string, args: string[]) => Promise<void>
-): Promise<void> {
-  const [command, ...args] = rawLine.trim().split(/\s+/);
-  if (!command) {
-    return;
-  }
-
-  if (!SUPPORTED_COMMANDS.includes(command as (typeof SUPPORTED_COMMANDS)[number])) {
-    output(`Unsupported command: ${command}`);
-    return;
-  }
-
-  if (!onCommand) {
-    output(`Accepted command: ${command} ${args.join(' ')}`.trim());
-    return;
-  }
-
-  await onCommand(command, args);
+  lineReader.close();
+  closeLiveStream();
+  return result;
 }

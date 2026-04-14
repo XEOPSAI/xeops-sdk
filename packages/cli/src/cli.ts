@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import { computeExitCode, parseTimeoutSeconds } from './options';
 import { computeCiExitCode, parseCiOutputFormat, runCiScan } from './ci';
 import { runInteractiveScan } from './interactive';
+import readline from 'node:readline';
 
 const program = new Command();
 
@@ -71,7 +72,20 @@ program
 
       if (options.interactive) {
         spinner.stop();
-        const result = await runInteractiveScan(client, { url: options.url });
+        const result = await runInteractiveScan(
+          client,
+          { url: options.url, timeoutSeconds: options.timeout },
+          {
+            print: (message) => {
+              console.log(chalk.cyan(message));
+            },
+            readLineFactory: () => readline.createInterface({
+              input: process.stdin,
+              output: process.stdout,
+              terminal: true
+            })
+          }
+        );
         const exitCode = getExitCode(result, options);
         process.exit(exitCode);
       }
