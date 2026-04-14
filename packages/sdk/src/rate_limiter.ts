@@ -1,68 +1,85 @@
-const DEFAULT_MAX_RETRIES = 3;
-const DEFAULT_BASE_DELAY_MS = 250;
-const DEFAULT_MAX_DELAY_MS = 5000;
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+const DEFAULT_RETRY_DELAY_SECONDS = 1;
+const MAX_RETRY_ATTEMPTS = 4;
+const JITTER_RATIO = 0.2;
 
-export interface RateLimiterConfig {
+export interface ClientRateLimiterConfig {
   maxRetries?: number;
-  baseDelayMs?: number;
-  maxDelayMs?: number;
-  random?: () => number;
 }
 
 /**
- * SDK-side rate limiter based on response headers and retry strategy.
+ * Parse Retry-After header value into milliseconds.
+ */
+export function parseRetryAfterMs(headerValue?: string | number): number {
+  if (headerValue === undefined) {
+    return 0;
+  }
+
+  const normalized = String(headerValue).trim();
+  const asSeconds = Number.parseInt(normalized, 10);
+  if (!Number.isNaN(asSeconds) && asSeconds > 0) {
+    return asSeconds * 1000;
+  }
+
+  const asDateMs = Date.parse(normalized);
+  if (Number.isNaN(asDateMs)) {
+    return 0;
+  }
+
+  const delta = asDateMs - Date.now();
+  return delta > 0 ? delta : 0;
+}
+
+/**
+ * SDK-side rate limiter using X-RateLimit-Remaining and Retry-After headers.
  */
 export class ClientRateLimiter {
-  private retryAtEpochMs = 0;
+  private nextAllowedRequestAt = 0;
   private readonly maxRetries: number;
-  private readonly baseDelayMs: number;
-  private readonly maxDelayMs: number;
-  private readonly random: () => number;
 
-  constructor(config: RateLimiterConfig = {}) {
-    this.maxRetries = config.maxRetries ?? DEFAULT_MAX_RETRIES;
-    this.baseDelayMs = config.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
-    this.maxDelayMs = config.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
-    this.random = config.random ?? Math.random;
+  constructor(config: ClientRateLimiterConfig = {}) {
+    this.maxRetries = config.maxRetries ?? MAX_RETRY_ATTEMPTS;
   }
 
-  updateFromHeaders(headers?: Record<string, unknown>): void {
-    if (!headers) {
+  async waitIfNeeded(waiter: (ms: number) => Promise<void>, now: () => number = () => Date.now()): Promise<void> {
+    const remainingWaitMs = this.nextAllowedRequestAt - now();
+    if (remainingWaitMs <= 0) {
       return;
     }
 
-    const remaining = Number(headers['x-ratelimit-remaining']);
-    const retryAfter = Number(headers['retry-after']);
-    if (remaining !== 0 || Number.isNaN(retryAfter) || retryAfter < 0) {
+    await waiter(remainingWaitMs);
+  }
+
+  updateFromHeaders(headers: Record<string, unknown>, now: () => number = () => Date.now()): void {
+    const remaining = headers['x-ratelimit-remaining'];
+    const retryAfterMs = parseRetryAfterMs(headers['retry-after'] as string | number | undefined);
+    if (retryAfterMs <= 0 || (remaining !== '0' && remaining !== 0 && remaining !== undefined)) {
       return;
     }
 
-    this.retryAtEpochMs = Date.now() + retryAfter * 1000;
-  }
-
-  async waitIfNeeded(sleep: (ms: number) => Promise<void>): Promise<void> {
-    const delay = this.retryAtEpochMs - Date.now();
-    if (delay > 0) {
-      await sleep(delay);
-    }
+    this.nextAllowedRequestAt = Math.max(this.nextAllowedRequestAt, now() + retryAfterMs);
   }
 
   shouldRetry(statusCode: number | undefined, attempt: number): boolean {
-    if (!statusCode || attempt >= this.maxRetries) {
+    if (attempt >= this.maxRetries || statusCode === undefined) {
       return false;
     }
-    return RETRYABLE_STATUSES.has(statusCode);
+
+    if (statusCode === 429) {
+      return true;
+    }
+
+    return statusCode >= 500;
   }
 
   computeDelayMs(attempt: number, retryAfterSeconds?: number): number {
-    if (retryAfterSeconds && retryAfterSeconds > 0) {
-      return retryAfterSeconds * 1000;
+    const retryAfterMs = parseRetryAfterMs(retryAfterSeconds);
+    if (retryAfterMs > 0) {
+      return retryAfterMs;
     }
 
-    const cappedAttempt = Math.max(0, attempt);
-    const exponential = this.baseDelayMs * (2 ** cappedAttempt);
-    const jitter = Math.floor(this.random() * this.baseDelayMs);
-    return Math.min(exponential + jitter, this.maxDelayMs);
+    const boundedAttempt = Math.min(attempt, this.maxRetries);
+    const baseDelay = DEFAULT_RETRY_DELAY_SECONDS * 1000 * (2 ** boundedAttempt);
+    const jitter = Math.floor(baseDelay * JITTER_RATIO * Math.random());
+    return baseDelay + jitter;
   }
 }
