@@ -19,6 +19,7 @@ import {
   resolveAuthConfig,
   buildApiKeyHeaders
 } from './auth';
+import { SDKRateLimiter } from './rate_limiter';
 
 /**
  * XeOps Security Scanner SDK Client
@@ -34,9 +35,11 @@ export class XeOpsScannerClient {
   };
   private auth: ScannerAuthConfig;
   private oauthProvider?: OAuthClientCredentialsProvider;
+  private rateLimiter: SDKRateLimiter;
 
   constructor(config: ScannerSDKConfig) {
     this.auth = resolveAuthConfig(config);
+    this.rateLimiter = new SDKRateLimiter();
 
     this.config = {
       timeout: config.timeout || 60000,
@@ -90,12 +93,19 @@ export class XeOpsScannerClient {
     // Response interceptor for error handling
     this.client.interceptors.response.use(
       (response) => {
+        this.rateLimiter.updateFromHeaders(response.headers);
         if (this.config.debug) {
           console.log(`[XeOps SDK] Response: ${response.status}`);
         }
         return response;
       },
-      (error) => this.handleError(error)
+      async (error) => {
+        const retried = await this.retryIfRateLimited(error);
+        if (retried) {
+          return retried;
+        }
+        return this.handleError(error);
+      }
     );
   }
 
@@ -409,6 +419,26 @@ export class XeOpsScannerClient {
     } catch {
       return null;
     }
+  }
+
+  private async retryIfRateLimited(error: unknown): Promise<unknown | null> {
+    if (!axios.isAxiosError(error) || !error.config) {
+      return null;
+    }
+
+    const statusCode = error.response?.status;
+    const requestConfig = error.config as typeof error.config & { __retryAttempt?: number };
+    const attempt = (requestConfig.__retryAttempt || 0) + 1;
+
+    if (!this.rateLimiter.shouldRetry(statusCode) || attempt > this.config.maxRetries) {
+      return null;
+    }
+
+    this.rateLimiter.updateFromHeaders(error.response?.headers);
+    const delayMs = this.rateLimiter.computeRetryDelayMs(attempt, error.response?.headers);
+    requestConfig.__retryAttempt = attempt;
+    await this.sleep(delayMs);
+    return this.client.request(requestConfig);
   }
 
   /**
