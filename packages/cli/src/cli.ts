@@ -7,6 +7,7 @@ import { XeOpsScannerClient, ScanResult } from '@xeopsai/sdk';
 import * as fs from 'fs';
 import { computeExitCode, parseTimeoutSeconds } from './options';
 import { computeCiExitCode, parseCiOutputFormat, runCiScan } from './ci';
+import { runInteractiveScan } from './interactive';
 
 const program = new Command();
 
@@ -28,6 +29,8 @@ program
   .option('--fail-on-high', 'Exit with code 1 if high/critical vulnerabilities found', false)
   .option('--fail-on-medium', 'Exit with code 1 if medium+ vulnerabilities found', false)
   .option('--ci', 'CI mode with completion wait and threshold-based exit code', false)
+  .option('--interactive', 'Interactive terminal mode with live events and commands', false)
+  .option('--persona <persona>', 'Scan persona (e.g. scout, red_team)')
   .option('--format <format>', 'CI output format: json|sarif|table', 'table')
   .option('--json', 'Output results as JSON', false)
   .action(async (options) => {
@@ -67,10 +70,23 @@ program
         process.exit(exitCode);
       }
 
+      if (options.interactive) {
+        spinner.stop();
+        const interactiveResult = await runInteractiveScan(client, {
+          url: options.url,
+          persona: options.persona,
+          timeoutMs: parseTimeoutSeconds(options.timeout) * 1000
+        });
+
+        const exitCode = getExitCode(interactiveResult, options);
+        process.exit(exitCode);
+      }
+
       // Start scan
       spinner.start('Starting security scan...');
       const scanResponse = await client.startScan({
-        targetUrl: options.url
+        targetUrl: options.url,
+        ...(options.persona ? { persona: options.persona } : {})
       });
       spinner.succeed(`Scan started: ${scanResponse.scanId}`);
 

@@ -1,4 +1,4 @@
-import { XeOpsScannerClient, ScanResult } from '@xeopsai/scanner-sdk';
+import { XeOpsScannerClient, ScanResult } from '@xeopsai/sdk';
 import { parseTimeoutSeconds } from './options';
 
 export type CiOutputFormat = 'json' | 'sarif' | 'table';

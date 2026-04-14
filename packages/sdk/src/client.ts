@@ -355,6 +355,20 @@ export class XeOpsScannerClient {
   }
 
   /**
+   * Send a live command for a running scan.
+   */
+  async sendScanCommand(
+    scanId: string,
+    payload: Record<string, unknown>
+  ): Promise<void> {
+    try {
+      await this.client.post(`/api/scans/${scanId}/commands`, payload);
+    } catch (error) {
+      throw this.formatError('Failed to send scan command', error);
+    }
+  }
+
+  /**
    * Cancel a running scan
    */
   async cancelScan(scanId: string): Promise<void> {
