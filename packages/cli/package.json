@@ -1,6 +1,6 @@
 {
   "name": "@xeopsai/scanner-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "XeOps Security Scanner CLI for CI/CD pipelines",
   "main": "dist/index.js",
   "bin": {
@@ -8,7 +8,10 @@
   },
   "scripts": {
     "build": "tsc",
-    "prepublishOnly": "npm run build"
+    "lint": "eslint src --ext .ts",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "prepublishOnly": "npm run build",
+    "test": "vitest run"
   },
   "keywords": [
     "xeops",
@@ -31,8 +34,13 @@
     "ora": "^5.4.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.24.0",
     "@types/node": "^20.0.0",
-    "typescript": "^5.3.0"
+    "eslint": "^9.24.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.3.0",
+    "typescript-eslint": "^8.29.0",
+    "vitest": "^3.1.1"
   },
   "engines": {
     "node": ">=16.0.0"
