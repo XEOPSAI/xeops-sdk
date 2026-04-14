@@ -1,97 +1,102 @@
-# CLAUDE.md - XeOps SDK Context
+# XeOps SDK & CLI Monorepo
 
-## Repository Overview
+TypeScript SDK and CLI for the XeOps Security Scanner.
 
-**XeOps SDK** is the official TypeScript SDK and CLI for the XeOps Security Platform. This is a **public** repository (MIT license) for CI/CD integration and programmatic access to the scanner.
-
-## Structure
+## Project Structure
 
 ```
 xeops-sdk/
 ├── packages/
-│   ├── sdk/                  # @xeopsai/scanner-sdk
+│   ├── sdk/                  # @xeopsai/sdk
 │   │   ├── src/
-│   │   │   ├── index.ts      # Exports + createClient() factory
-│   │   │   ├── client.ts     # XeOpsScannerClient class (all methods)
-│   │   │   └── types.ts      # TypeScript types + ScannerError class
-│   │   ├── examples/         # CI/CD examples (GitHub Actions, GitLab CI, Jenkins)
+│   │   │   ├── client.ts     # Main SDK client
+│   │   │   ├── types.ts      # TypeScript definitions
+│   │   │   ├── auth.ts       # API key + OAuth auth support
+│   │   │   ├── sse.ts        # SSE helpers and stream parsing
+│   │   │   └── *.test.ts     # Unit tests
 │   │   └── package.json
-│   └── cli/                  # @xeopsai/scanner-cli
+│   └── cli/                  # @xeopsai/cli
 │       ├── src/
-│       │   └── cli.ts        # Single-file CLI (Commander.js + chalk + ora)
+│       │   ├── cli.ts        # Commander entrypoint
+│       │   ├── options.ts    # CI exit code + timeout parsing helpers
+│       │   └── *.test.ts     # Unit tests
 │       └── package.json
-├── .github/                  # CI workflow, Dependabot, CODEOWNERS
-├── README.md
-└── LICENSE                   # MIT
+└── .github/workflows/
+    ├── ci.yml
+    ├── sdk-quality.yml
+    └── publish.yml
 ```
 
-> **No root `package.json`** — packages are independent, not an npm workspace.
+## SDK
 
-## SDK (`packages/sdk/`)
+Package: `@xeopsai/sdk` — Axios-based HTTP client.
 
-Package: `@xeopsai/scanner-sdk` — Axios-based HTTP client.
+### Key Methods
 
-### Key Class: `XeOpsScannerClient`
+- `startScan({ targetUrl, persona? })`
+- `getScanResult(scanId)`
+- `getGraph(scanId)`
+- `getFindings(scanId)`
+- `subscribeToScanEvents(scanId, handlers, options?)` (WS + SSE fallback)
+- `waitForScanCompletion(scanId, options?)`
+- `downloadPdfReport(scanId, validatePoc?)`
+- `getUsage()`
+- `verifyApiKey()`
 
-All methods are in `client.ts` (no separate resource files):
-- `startScan(request)` — POST `/api/scans`
-- `getScanResult(scanId)` — GET `/api/scans/:id`
-- `listScans(params?)` — GET `/api/scans`
-- `cancelScan(scanId)` — POST `/api/scans/:id/cancel`
-- `waitForScanCompletion(scanId, options?)` — Polling with timeout
-- `downloadPdfReport(scanId, validatePoc?)` — GET `/api/scans/:id/report/pdf`
-- `getUsage()` — GET `/api/users/usage`
-- `verifyApiKey()` — GET `/api/auth/verify`
-- `healthCheck()` — GET `/health`
+### Auth
 
-### Config
+- API key via `X-API-Key`
+- OAuth client credentials (`clientId`, `clientSecret`, optional `tokenUrl`)
 
-```typescript
-import { XeOpsScannerClient } from '@xeopsai/scanner-sdk';
+### Example
+
+```ts
+import { XeOpsScannerClient } from '@xeopsai/sdk';
 
 const client = new XeOpsScannerClient({
-  apiEndpoint: 'https://api.xeops.ai',
-  apiKey: 'your-api-key',
-  timeout: 60000,    // optional (default: 60s)
-  maxRetries: 3,     // optional
-  debug: false       // optional
+  apiEndpoint: process.env.XEOPS_API_ENDPOINT!,
+  apiKey: process.env.XEOPS_API_KEY!
 });
 ```
 
-## CLI (`packages/cli/`)
+## CLI
 
-Package: `@xeopsai/scanner-cli` — Binary: `xeops-scan`
+Package: `@xeopsai/cli` — Binary: `xeops-scan`
 
-Single command `scan` with options:
-- `-u, --url <url>` — Target URL (required)
-- `-k, --api-key <key>` — API key (required)
-- `-e, --endpoint <endpoint>` — API endpoint
-- `-w, --wait` — Wait for scan completion
-- `--pdf <path>` — Download PDF report
-- `--fail-on-high` / `--fail-on-medium` — CI quality gates
-- `--json` — JSON output
+### Commands
 
-Dependencies: `@xeopsai/scanner-sdk`, `commander`, `chalk`, `ora`
+- `xeops-scan scan --url <url> --api-key <key> [--wait] [--fail-on-high] [--json]`
+- `xeops-scan status --scan-id <id> --api-key <key>`
+- `xeops-scan report --scan-id <id> --api-key <key> --output <path>`
+- `xeops-scan usage --api-key <key>`
 
-## Development Commands
+### CI Mode Helpers
+
+`packages/cli/src/options.ts` contains:
+
+- `parseTimeoutSeconds(raw)`
+- `computeExitCode(metadata, { failOnHigh, failOnMedium })`
+
+## Dev Commands
+
+From package directories:
 
 ```bash
-# Each package independently:
-cd packages/sdk && npm install && npm run build && npm test  # Jest
-cd packages/cli && npm install && npm run build
+npm run build
+npm run test
+npm run lint
+npm run format:check
 ```
 
-## Public vs Private
+## Publishing
 
-This is a **PUBLIC** repository:
-- Open source (MIT license)
-- No proprietary code — just API client wrappers
-- Does NOT contain scanning logic, AI prompts, or authentication logic
+Tag push `v*` triggers `.github/workflows/publish.yml`:
 
-## Related Repos
+1. Publish `@xeopsai/sdk`
+2. Publish `@xeopsai/cli`
 
-| Repo | Relationship |
-|------|--------------|
-| `xeops-platform` | API Gateway that this SDK calls |
-| `xeops-core` | Scanner engine (NOT accessed by SDK directly) |
-| `xeops-docs` | Documentation references this SDK |
+## Notes
+
+- Code/comments/messages in English.
+- Keep strict typing in TypeScript.
+- Add unit tests for new helper functions (happy/edge/error paths).

@@ -1,4 +1,4 @@
-import { XeOpsScannerClient, ScanResult } from '@xeops/scanner-sdk';
+import { XeOpsScannerClient, ScanResult } from '@xeopsai/sdk';
 import * as fs from 'fs';
 
 /**

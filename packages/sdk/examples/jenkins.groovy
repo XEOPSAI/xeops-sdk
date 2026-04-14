@@ -10,7 +10,7 @@ pipeline {
         stage('Setup') {
             steps {
                 script {
-                    sh 'npm install -g @xeops/scanner-cli'
+                    sh 'npm install -g @xeopsai/cli'
                 }
             }
         }

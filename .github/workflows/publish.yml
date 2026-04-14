@@ -12,15 +12,8 @@ env:
   NODE_VERSION: '20'
 
 jobs:
-  publish:
+  publish-sdk:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - packageDir: packages/sdk
-            packageName: '@xeopsai/sdk'
-          - packageDir: packages/cli
-            packageName: '@xeopsai/cli'
     steps:
       - uses: actions/checkout@v4
 
@@ -31,23 +24,57 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-        working-directory: ${{ matrix.packageDir }}
+        working-directory: packages/sdk
 
       - name: Build package
         run: npm run build
-        working-directory: ${{ matrix.packageDir }}
+        working-directory: packages/sdk
 
       - name: Verify package name
         run: |
           NAME=$(node -p "require('./package.json').name")
-          if [ "$NAME" != "${{ matrix.packageName }}" ]; then
-            echo "Expected package name ${{ matrix.packageName }} but got $NAME"
+          if [ "$NAME" != "@xeopsai/sdk" ]; then
+            echo "Expected package name @xeopsai/sdk but got $NAME"
             exit 1
           fi
-        working-directory: ${{ matrix.packageDir }}
+        working-directory: packages/sdk
 
-      - name: Publish package
+      - name: Publish SDK package
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        working-directory: ${{ matrix.packageDir }}
+        working-directory: packages/sdk
+
+  publish-cli:
+    runs-on: ubuntu-latest
+    needs: publish-sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: packages/cli
+
+      - name: Build package
+        run: npm run build
+        working-directory: packages/cli
+
+      - name: Verify package name
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          if [ "$NAME" != "@xeopsai/cli" ]; then
+            echo "Expected package name @xeopsai/cli but got $NAME"
+            exit 1
+          fi
+        working-directory: packages/cli
+
+      - name: Publish CLI package
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: packages/cli

@@ -24,7 +24,7 @@ jobs:
       - name: Run Security Scan
         id: scan
         run: |
-          npx @xeops/scanner-cli scan \
+          npx @xeopsai/cli scan \
             --url ${{ secrets.STAGING_URL || 'https://staging.example.com' }} \
             --api-key ${{ secrets.XEOPS_API_KEY }} \
             --wait \
