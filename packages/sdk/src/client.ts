@@ -8,6 +8,12 @@ import {
   WaitForScanOptions,
   ScannerError
 } from './types';
+import {
+  ScannerAuthConfig,
+  OAuthClientCredentialsProvider,
+  resolveAuthConfig,
+  buildApiKeyHeaders
+} from './auth';
 
 /**
  * XeOps Security Scanner SDK Client
@@ -15,9 +21,18 @@ import {
  */
 export class XeOpsScannerClient {
   private client: AxiosInstance;
-  private config: Required<ScannerSDKConfig>;
+  private config: ScannerSDKConfig & {
+    timeout: number;
+    maxRetries: number;
+    retryDelay: number;
+    debug: boolean;
+  };
+  private auth: ScannerAuthConfig;
+  private oauthProvider?: OAuthClientCredentialsProvider;
 
   constructor(config: ScannerSDKConfig) {
+    this.auth = resolveAuthConfig(config);
+
     this.config = {
       timeout: config.timeout || 60000,
       maxRetries: config.maxRetries || 3,
@@ -26,16 +41,36 @@ export class XeOpsScannerClient {
       ...config
     };
 
+    const baseHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Client': 'scanner-sdk',
+      'X-Client-Version': '1.0.0'
+    };
+
+    if (this.auth.type === 'apiKey') {
+      Object.assign(baseHeaders, buildApiKeyHeaders(this.auth.apiKey));
+    } else {
+      this.oauthProvider = new OAuthClientCredentialsProvider(
+        this.auth,
+        this.config.apiEndpoint,
+        this.config.timeout
+      );
+    }
+
     this.client = axios.create({
       baseURL: this.config.apiEndpoint,
       timeout: this.config.timeout,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`,
-        'X-Client': 'scanner-sdk',
-        'X-Client-Version': '1.0.0'
-      }
+      headers: baseHeaders
     });
+
+    if (this.auth.type === 'oauth') {
+      this.client.interceptors.request.use(async (requestConfig) => {
+        const token = await this.oauthProvider!.getAccessToken();
+        requestConfig.headers = requestConfig.headers || {};
+        requestConfig.headers.Authorization = `Bearer ${token}`;
+        return requestConfig;
+      });
+    }
 
     // Request interceptor for debugging
     if (this.config.debug) {
@@ -167,7 +202,7 @@ export class XeOpsScannerClient {
   }
 
   /**
-   * Verify API key is valid
+   * Verify auth credentials are valid
    */
   async verifyApiKey(): Promise<boolean> {
     try {

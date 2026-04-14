@@ -2,6 +2,8 @@
  * XeOps Scanner SDK Types
  */
 
+import { ScannerAuthConfig } from './auth';
+
 export interface ScanConfig {
   url: string;
   depth?: number;
@@ -71,7 +73,8 @@ export interface UsageStats {
 
 export interface ScannerSDKConfig {
   apiEndpoint: string;
-  apiKey: string;
+  apiKey?: string;
+  auth?: ScannerAuthConfig;
   timeout?: number;
   maxRetries?: number;
   retryDelay?: number;
