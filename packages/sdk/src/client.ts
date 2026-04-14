@@ -21,6 +21,8 @@ import {
 } from './auth';
 import { SDKRateLimiter } from './rate_limiter';
 
+const INITIAL_RETRY_ATTEMPT = 0;
+
 /**
  * XeOps Security Scanner SDK Client
  * For CI/CD integration and programmatic access
@@ -428,7 +430,7 @@ export class XeOpsScannerClient {
 
     const statusCode = error.response?.status;
     const requestConfig = error.config as typeof error.config & { __retryAttempt?: number };
-    const attempt = (requestConfig.__retryAttempt || 0) + 1;
+    const attempt = (requestConfig.__retryAttempt || INITIAL_RETRY_ATTEMPT) + 1;
 
     if (!this.rateLimiter.shouldRetry(statusCode) || attempt > this.config.maxRetries) {
       return null;

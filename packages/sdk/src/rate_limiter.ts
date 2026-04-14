@@ -2,7 +2,7 @@ import { AxiosResponseHeaders, RawAxiosResponseHeaders } from 'axios';
 
 const DEFAULT_RETRY_AFTER_SECONDS = 1;
 const MILLISECONDS_IN_SECOND = 1_000;
-const RETRY_STATUS = 429;
+const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
 
 /**
  * SDK client-side rate limiter based on HTTP response headers.
@@ -46,7 +46,7 @@ export class SDKRateLimiter {
    */
   shouldRetry(statusCode: number | undefined): boolean {
     if (!statusCode) return true;
-    if (statusCode === RETRY_STATUS) return true;
+    if (statusCode === HTTP_STATUS_TOO_MANY_REQUESTS) return true;
     return statusCode >= 500;
   }
 }
