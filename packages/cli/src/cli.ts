@@ -6,6 +6,7 @@ import ora from 'ora';
 import { XeOpsScannerClient, ScanResult } from '@xeopsai/scanner-sdk';
 import * as fs from 'fs';
 import { computeExitCode, parseTimeoutSeconds } from './options';
+import { buildCiSummary, getCiExitCode, renderCiOutput, CiOutputFormat } from './ci';
 
 const program = new Command();
 
@@ -26,6 +27,8 @@ program
   .option('--validate-poc', 'Validate vulnerabilities with PoC', true)
   .option('--fail-on-high', 'Exit with code 1 if high/critical vulnerabilities found', false)
   .option('--fail-on-medium', 'Exit with code 1 if medium+ vulnerabilities found', false)
+  .option('--ci', 'Run in CI mode and wait for completion automatically', false)
+  .option('--format <format>', 'CI output format: json|sarif|table', 'table')
   .option('--json', 'Output results as JSON', false)
   .action(async (options) => {
     const client = new XeOpsScannerClient({
@@ -56,8 +59,9 @@ program
 
       let result: ScanResult | undefined;
 
-      // Wait for completion if requested
-      if (options.wait) {
+      // Wait for completion if requested (always enabled in CI mode)
+      const shouldWaitForCompletion = options.wait || options.ci;
+      if (shouldWaitForCompletion) {
         console.log(chalk.yellow('\nWaiting for scan to complete...\n'));
 
         const progressSpinner = ora('Initializing...').start();
@@ -78,6 +82,20 @@ program
         );
 
         progressSpinner.succeed('Scan completed');
+
+        if (options.ci) {
+          const format = resolveCiFormat(options.format);
+          const summary = buildCiSummary(scanResponse.scanId, result);
+          process.stdout.write(`${renderCiOutput(summary, format)}\n`);
+
+          const exitCode = getCiExitCode(summary, options);
+          if (exitCode !== 0) {
+            process.stderr.write(
+              `${chalk.red(`CI policy failed with exit code ${exitCode}`)}\n`
+            );
+          }
+          process.exit(exitCode);
+        }
 
         // Display results
         displayResults(result, options.json);
@@ -233,6 +251,15 @@ function getExitCode(
   }
 ): number {
   return computeExitCode(result.metadata, options);
+}
+
+function resolveCiFormat(format: string): CiOutputFormat {
+  const allowedFormats: CiOutputFormat[] = ['json', 'sarif', 'table'];
+  if (!allowedFormats.includes(format as CiOutputFormat)) {
+    throw new Error(`Invalid --format value: ${format}. Allowed values: json, sarif, table`);
+  }
+
+  return format as CiOutputFormat;
 }
 
 program.parse(process.argv);
