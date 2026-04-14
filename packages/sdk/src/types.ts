@@ -14,6 +14,7 @@ export interface ScanConfig {
 
 export interface ScanRequest {
   targetUrl: string;
+  persona?: string;
   config?: ScanConfig;
 }
 
@@ -21,6 +22,13 @@ export interface ScanResponse {
   scanId: string;
   status: 'queued' | 'running' | 'completed' | 'failed';
   message?: string;
+}
+
+export type ValidationLevel = 'deterministic' | 'sandbox' | 'llm' | 'unknown';
+
+export interface FindingEvidence {
+  summary?: string;
+  [key: string]: unknown;
 }
 
 export interface Vulnerability {
@@ -39,6 +47,9 @@ export interface Vulnerability {
   references?: string[];
   validated?: boolean;
   validation_evidence?: string;
+  validation_level?: ValidationLevel;
+  reproducer?: string;
+  structured_evidence?: FindingEvidence;
 }
 
 export interface ScanResult {
@@ -62,6 +73,54 @@ export interface ScanResult {
     lowCount?: number;
     infoCount?: number;
   };
+}
+
+export interface ScanGraphNode {
+  id: string;
+  label: string;
+  properties?: Record<string, unknown>;
+}
+
+export interface ScanGraphEdge {
+  source: string;
+  target: string;
+  type: string;
+  properties?: Record<string, unknown>;
+}
+
+export interface ScanGraph {
+  nodes: ScanGraphNode[];
+  edges: ScanGraphEdge[];
+  stats?: Record<string, unknown>;
+}
+
+export interface ScanFinding extends Vulnerability {
+  validation_level?: ValidationLevel;
+  reproducer?: string;
+  structured_evidence?: FindingEvidence;
+}
+
+export interface ScanLiveEvent {
+  type: string;
+  timestamp?: string;
+  payload: Record<string, unknown>;
+}
+
+export interface ScanLiveEventHandlers {
+  onEvent: (event: ScanLiveEvent) => void;
+  onError?: (error: Error) => void;
+  onOpen?: () => void;
+  onClose?: () => void;
+}
+
+export interface LiveScanOptions {
+  /**
+   * Explicit transport preference.
+   * - auto: WebSocket first, falls back to EventSource (SSE)
+   * - ws: WebSocket only
+   * - sse: EventSource only
+   */
+  transport?: 'auto' | 'ws' | 'sse';
 }
 
 export interface UsageStats {

@@ -20,9 +20,10 @@ const client = new XeOpsScannerClient({
   apiKey: 'your-api-key'
 });
 
-// Start a scan
+// Start a scan (persona optional)
 const scan = await client.startScan({
-  targetUrl: 'https://example.com'
+  targetUrl: 'https://example.com',
+  persona: 'scout'
 });
 
 console.log('Scan ID:', scan.scanId);
@@ -119,6 +120,18 @@ Start a new security scan.
 **getScanResult(scanId: string): Promise<ScanResult>**
 
 Get the current status and results of a scan.
+
+**getGraph(scanId: string): Promise<ScanGraph>**
+
+Fetch V13 graph export for a scan (`/api/scans/:id/graph`).
+
+**getFindings(scanId: string): Promise<ScanFinding[]>**
+
+Fetch V13 findings (`/api/scans/:id/findings`) including `validation_level`, `reproducer`, and structured evidence.
+
+**subscribeToScanEvents(scanId: string, handlers, options?)**
+
+Subscribe to live scan events using WebSocket or SSE fallback.
 
 **waitForScanCompletion(scanId: string, options?: WaitForScanOptions): Promise<ScanResult>**
 
