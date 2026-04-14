@@ -6,7 +6,12 @@ import {
   UsageStats,
   ScannerSDKConfig,
   WaitForScanOptions,
-  ScannerError
+  ScannerError,
+  ScanGraph,
+  ScanFinding,
+  ScanLiveEvent,
+  ScanLiveEventHandlers,
+  LiveScanOptions
 } from './types';
 import {
   ScannerAuthConfig,
@@ -116,6 +121,85 @@ export class XeOpsScannerClient {
     } catch (error) {
       throw this.formatError('Failed to get scan result', error);
     }
+  }
+
+  /**
+   * Get V13 graph export for a scan
+   */
+  async getGraph(scanId: string): Promise<ScanGraph> {
+    try {
+      const response = await this.client.get<ScanGraph>(`/api/scans/${scanId}/graph`);
+      return response.data;
+    } catch (error) {
+      throw this.formatError('Failed to get scan graph', error);
+    }
+  }
+
+  /**
+   * Get findings for a scan (V13 payload with validation/reproducer/evidence)
+   */
+  async getFindings(scanId: string): Promise<ScanFinding[]> {
+    try {
+      const response = await this.client.get<ScanFinding[]>(`/api/scans/${scanId}/findings`);
+      return response.data;
+    } catch (error) {
+      throw this.formatError('Failed to get scan findings', error);
+    }
+  }
+
+  /**
+   * Subscribe to live scan events over WebSocket.
+   * Returns a cleanup function to close the connection.
+   */
+  subscribeToScanEvents(
+    scanId: string,
+    handlers: ScanLiveEventHandlers,
+    options: LiveScanOptions = {}
+  ): () => void {
+    const transport = options.transport || 'auto';
+
+    if (transport === 'sse') {
+      throw new ScannerError('SSE transport is not implemented yet in this SDK version');
+    }
+
+    const WS = (globalThis as any).WebSocket as
+      | (new (url: string) => {
+          onopen: (() => void) | null;
+          onerror: ((event: unknown) => void) | null;
+          onmessage: ((event: { data: string }) => void) | null;
+          onclose: (() => void) | null;
+          close: () => void;
+        })
+      | undefined;
+
+    if (!WS) {
+      throw new ScannerError('WebSocket is not available in this runtime');
+    }
+
+    const socket = new WS(this.buildLiveWsUrl(scanId));
+
+    socket.onopen = () => {
+      handlers.onOpen?.();
+    };
+
+    socket.onerror = () => {
+      handlers.onError?.(new ScannerError('Live scan WebSocket connection error'));
+    };
+
+    socket.onmessage = (event) => {
+      const parsed = this.parseLiveEvent(event.data);
+      if (parsed) {
+        handlers.onEvent(parsed);
+      }
+    };
+
+    socket.onclose = () => {
+      handlers.onClose?.();
+    };
+
+    return () => {
+      socket.close();
+    };
   }
 
   /**
@@ -251,6 +335,29 @@ export class XeOpsScannerClient {
       return response.data;
     } catch (error) {
       throw this.formatError('Failed to list scans', error);
+    }
+  }
+
+  private buildLiveWsUrl(scanId: string): string {
+    const endpoint = this.config.apiEndpoint.replace(/\/$/, '');
+    const wsBase = endpoint.replace(/^http/i, 'ws');
+    return `${wsBase}/api/scans/${scanId}/live`;
+  }
+
+  private parseLiveEvent(raw: string): ScanLiveEvent | null {
+    try {
+      const parsed = JSON.parse(raw) as ScanLiveEvent;
+      if (!parsed || typeof parsed.type !== 'string') {
+        return null;
+      }
+
+      if (!parsed.payload || typeof parsed.payload !== 'object') {
+        parsed.payload = {};
+      }
+
+      return parsed;
+    } catch {
+      return null;
     }
   }
 
