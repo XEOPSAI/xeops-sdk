@@ -7,6 +7,7 @@ import { XeOpsScannerClient, ScanResult } from '@xeopsai/sdk';
 import * as fs from 'fs';
 import { computeExitCode, parseTimeoutSeconds } from './options';
 import { computeCiExitCode, parseCiOutputFormat, runCiScan } from './ci';
+import { InteractiveCommand, runInteractiveSession } from './interactive';
 
 const program = new Command();
 
@@ -28,6 +29,7 @@ program
   .option('--fail-on-high', 'Exit with code 1 if high/critical vulnerabilities found', false)
   .option('--fail-on-medium', 'Exit with code 1 if medium+ vulnerabilities found', false)
   .option('--ci', 'CI mode with completion wait and threshold-based exit code', false)
+  .option('--interactive', 'Interactive live mode for scan monitoring and commands', false)
   .option('--format <format>', 'CI output format: json|sarif|table', 'table')
   .option('--json', 'Output results as JSON', false)
   .action(async (options) => {
@@ -78,6 +80,23 @@ program
       console.log(chalk.blue(`Target: ${options.url}`));
 
       let result: ScanResult | undefined;
+
+      if (options.interactive) {
+        result = await runInteractiveSession({
+          client,
+          scanId: scanResponse.scanId,
+          input: process.stdin,
+          output: process.stdout,
+          sendCommand: (command) => sendInteractiveCommand(command, {
+            endpoint: options.endpoint,
+            apiKey: options.apiKey,
+            scanId: scanResponse.scanId
+          })
+        });
+
+        displayResults(result, options.json);
+        process.exit(getExitCode(result, options));
+      }
 
       // Wait for completion if requested
       if (options.wait) {
@@ -245,6 +264,35 @@ function getStatusColor(status: string): string {
       return chalk.yellow(status);
     default:
       return chalk.gray(status);
+  }
+}
+
+const JSON_HEADERS = {
+  'Content-Type': 'application/json'
+};
+
+async function sendInteractiveCommand(
+  command: InteractiveCommand,
+  options: {
+    endpoint: string;
+    apiKey: string;
+    scanId: string;
+  }
+): Promise<void> {
+  const url = `${options.endpoint.replace(/\/$/, '')}/api/scans/${options.scanId}/live/commands`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...JSON_HEADERS,
+      'X-API-Key': options.apiKey
+    },
+    body: JSON.stringify(command)
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Failed to send command (${response.status}): ${message}`);
   }
 }
 
