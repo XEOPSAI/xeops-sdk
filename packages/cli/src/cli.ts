@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { XeOpsScannerClient, ScanResult } from '@xeopsai/scanner-sdk';
 import * as fs from 'fs';
+import { validateScanCommandOptions } from './options';
 
 const program = new Command();
 
@@ -27,6 +28,8 @@ program
   .option('--fail-on-medium', 'Exit with code 1 if medium+ vulnerabilities found', false)
   .option('--json', 'Output results as JSON', false)
   .action(async (options) => {
+    validateScanCommandOptions(options);
+
     const client = new XeOpsScannerClient({
       apiEndpoint: options.endpoint,
       apiKey: options.apiKey,

@@ -1,0 +1,34 @@
+name: SDK Quality
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint-and-unit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package:
+          - packages/sdk
+          - packages/cli
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.package }}
+        run: npm ci
+
+      - name: Lint
+        working-directory: ${{ matrix.package }}
+        run: npm run lint
+
+      - name: Unit tests
+        working-directory: ${{ matrix.package }}
+        run: npm run test
