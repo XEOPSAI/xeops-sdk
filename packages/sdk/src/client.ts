@@ -19,6 +19,7 @@ import {
   resolveAuthConfig,
   buildApiKeyHeaders
 } from './auth';
+import { ClientRateLimiter } from './rate_limiter';
 
 /**
  * XeOps Security Scanner SDK Client
@@ -34,6 +35,7 @@ export class XeOpsScannerClient {
   };
   private auth: ScannerAuthConfig;
   private oauthProvider?: OAuthClientCredentialsProvider;
+  private rateLimiter: ClientRateLimiter;
 
   constructor(config: ScannerSDKConfig) {
     this.auth = resolveAuthConfig(config);
@@ -45,6 +47,10 @@ export class XeOpsScannerClient {
       debug: config.debug || false,
       ...config
     };
+
+    this.rateLimiter = new ClientRateLimiter({
+      baseDelayMs: this.config.retryDelay
+    });
 
     const baseHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -95,7 +101,7 @@ export class XeOpsScannerClient {
         }
         return response;
       },
-      (error) => this.handleError(error)
+      (error) => this.handleRetryableError(error)
     );
   }
 
@@ -366,6 +372,35 @@ export class XeOpsScannerClient {
   }
 
   /**
+   * Resume a paused scan.
+   */
+  async resumeScan(scanId: string): Promise<void> {
+    try {
+      await this.client.post(`/api/scans/${scanId}/resume`);
+    } catch (error) {
+      throw this.formatError('Failed to resume scan', error);
+    }
+  }
+
+  /**
+   * Send a live command to the running scan.
+   */
+  async sendLiveCommand(
+    scanId: string,
+    command: 'focus' | 'skip' | 'pause' | 'resume' | 'stop',
+    payload: Record<string, unknown> = {}
+  ): Promise<void> {
+    try {
+      await this.client.post(`/api/scans/${scanId}/live/commands`, {
+        type: command,
+        payload
+      });
+    } catch (error) {
+      throw this.formatError('Failed to send live command', error);
+    }
+  }
+
+  /**
    * List scans for the authenticated user
    */
   async listScans(params?: {
@@ -412,25 +447,40 @@ export class XeOpsScannerClient {
   }
 
   /**
-   * Handle axios errors
+   * Handle retryable axios errors.
    */
-  private handleError(error: any): Promise<never> {
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError;
-
-      if (axiosError.response) {
-        // Server responded with error
-        const status = axiosError.response.status;
-        const message = (axiosError.response.data as any)?.message || axiosError.message;
-
-        return Promise.reject(new ScannerError(message, status, axiosError.response.data));
-      } else if (axiosError.request) {
-        // Request made but no response
-        return Promise.reject(new ScannerError('Network error: No response from server'));
-      }
+  private async handleRetryableError(error: any): Promise<never> {
+    if (!axios.isAxiosError(error)) {
+      return Promise.reject(error);
     }
 
-    return Promise.reject(error);
+    const axiosError = error as AxiosError;
+    const requestConfig = axiosError.config as (AxiosError['config'] & { __retryCount?: number }) | undefined;
+    const statusCode = axiosError.response?.status;
+    const retryCount = requestConfig?.__retryCount ?? 0;
+
+    if (requestConfig && this.rateLimiter.shouldRetry(statusCode) && retryCount < this.config.maxRetries) {
+      requestConfig.__retryCount = retryCount + 1;
+      const delay = this.rateLimiter.getRetryDelay(requestConfig.__retryCount, axiosError.response?.headers as Record<string, unknown> | undefined);
+      await this.sleep(delay);
+      return this.client.request(requestConfig as any);
+    }
+
+    return Promise.reject(this.toScannerError(axiosError));
+  }
+
+  private toScannerError(error: AxiosError): ScannerError {
+    if (error.response) {
+      const status = error.response.status;
+      const message = (error.response.data as any)?.message || error.message;
+      return new ScannerError(message, status, error.response.data);
+    }
+
+    if (error.request) {
+      return new ScannerError('Network error: No response from server');
+    }
+
+    return new ScannerError(error.message || 'Unknown error');
   }
 
   /**
