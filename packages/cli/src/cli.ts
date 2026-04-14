@@ -3,7 +3,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
-import { XeOpsScannerClient, ScanResult } from '@xeopsai/scanner-sdk';
+import { XeOpsScannerClient, ScanResult } from '@xeopsai/sdk';
 import * as fs from 'fs';
 import { computeExitCode, parseTimeoutSeconds } from './options';
 
