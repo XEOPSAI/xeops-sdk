@@ -1,0 +1,48 @@
+name: Publish SDK and CLI
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      matrix:
+        package:
+          - path: packages/sdk
+            name: '@xeopsai/sdk'
+          - path: packages/cli
+            name: '@xeopsai/cli'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ matrix.package.path }}
+
+      - name: Run tests
+        run: npm test
+        working-directory: ${{ matrix.package.path }}
+
+      - name: Build package
+        run: npm run build
+        working-directory: ${{ matrix.package.path }}
+
+      - name: Publish package
+        run: npm publish --access public
+        working-directory: ${{ matrix.package.path }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
