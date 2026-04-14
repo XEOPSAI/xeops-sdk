@@ -6,6 +6,7 @@
 export { XeOpsScannerClient } from './client';
 export * from './types';
 export * from './auth';
+export * from './sse';
 
 // Export convenience factory function
 import { XeOpsScannerClient } from './client';
