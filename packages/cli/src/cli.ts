@@ -6,6 +6,7 @@ import ora from 'ora';
 import { XeOpsScannerClient, ScanResult } from '@xeopsai/scanner-sdk';
 import * as fs from 'fs';
 import { computeExitCode, parseTimeoutSeconds } from './options';
+import { parseCiOutputFormat, renderCiOutput, computeCiExitCode } from './ci';
 
 const program = new Command();
 
@@ -27,6 +28,8 @@ program
   .option('--fail-on-high', 'Exit with code 1 if high/critical vulnerabilities found', false)
   .option('--fail-on-medium', 'Exit with code 1 if medium+ vulnerabilities found', false)
   .option('--json', 'Output results as JSON', false)
+  .option('--ci', 'Enable CI mode (machine-readable summary + policy exit code)', false)
+  .option('--format <format>', 'CI output format: table|json|sarif', 'table')
   .action(async (options) => {
     const client = new XeOpsScannerClient({
       apiEndpoint: options.endpoint,
@@ -79,8 +82,13 @@ program
 
         progressSpinner.succeed('Scan completed');
 
-        // Display results
-        displayResults(result, options.json);
+        if (options.ci) {
+          const format = parseCiOutputFormat(options.format);
+          console.log(renderCiOutput(result, format));
+        } else {
+          // Display results
+          displayResults(result, options.json);
+        }
 
         // Download PDF if requested
         if (options.pdf) {
@@ -94,7 +102,9 @@ program
         }
 
         // Exit with appropriate code based on severity
-        const exitCode = getExitCode(result, options);
+        const exitCode = options.ci
+          ? computeCiExitCode(result, options)
+          : getExitCode(result, options);
         if (exitCode !== 0) {
           console.log(chalk.red(`\nExiting with code ${exitCode} due to vulnerability severity threshold`));
         }
