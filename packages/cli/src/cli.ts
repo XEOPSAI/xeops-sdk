@@ -6,6 +6,7 @@ import ora from 'ora';
 import { XeOpsScannerClient, ScanResult } from '@xeopsai/scanner-sdk';
 import * as fs from 'fs';
 import { computeExitCode, parseTimeoutSeconds } from './options';
+import { runCiScan } from './ci';
 
 const program = new Command();
 
@@ -24,8 +25,10 @@ program
   .option('--timeout <seconds>', 'Scan timeout in seconds', '1800')
   .option('--pdf <path>', 'Download PDF report to path')
   .option('--validate-poc', 'Validate vulnerabilities with PoC', true)
+  .option('--ci', 'Run in CI/CD mode and return threshold-based exit code', false)
   .option('--fail-on-high', 'Exit with code 1 if high/critical vulnerabilities found', false)
   .option('--fail-on-medium', 'Exit with code 1 if medium+ vulnerabilities found', false)
+  .option('--format <format>', 'Output format for CI mode: json|sarif|table', 'table')
   .option('--json', 'Output results as JSON', false)
   .action(async (options) => {
     const client = new XeOpsScannerClient({
@@ -43,6 +46,23 @@ program
         process.exit(1);
       }
       spinner.succeed('API key verified');
+
+      if (options.ci) {
+        const exitCode = await runCiScan(
+          client,
+          {
+            url: options.url,
+            timeout: options.timeout,
+            failOnHigh: options.failOnHigh,
+            failOnMedium: options.failOnMedium,
+            format: options.format
+          },
+          (message) => {
+            console.log(message);
+          }
+        );
+        process.exit(exitCode);
+      }
 
       // Start scan
       spinner.start('Starting security scan...');
