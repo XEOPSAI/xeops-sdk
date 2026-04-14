@@ -19,6 +19,7 @@ import {
   resolveAuthConfig,
   buildApiKeyHeaders
 } from './auth';
+import { XeOpsRateLimiter } from './rate_limiter';
 
 /**
  * XeOps Security Scanner SDK Client
@@ -34,9 +35,11 @@ export class XeOpsScannerClient {
   };
   private auth: ScannerAuthConfig;
   private oauthProvider?: OAuthClientCredentialsProvider;
+  private rateLimiter: XeOpsRateLimiter;
 
   constructor(config: ScannerSDKConfig) {
     this.auth = resolveAuthConfig(config);
+    this.rateLimiter = new XeOpsRateLimiter();
 
     this.config = {
       timeout: config.timeout || 60000,
@@ -87,15 +90,24 @@ export class XeOpsScannerClient {
       );
     }
 
-    // Response interceptor for error handling
+    // Response interceptor for debug and limiter state
     this.client.interceptors.response.use(
       (response) => {
+        this.rateLimiter.updateFromResponse(response.status, response.headers as Record<string, unknown>);
         if (this.config.debug) {
           console.log(`[XeOps SDK] Response: ${response.status}`);
         }
         return response;
       },
-      (error) => this.handleError(error)
+      (error) => {
+        if (axios.isAxiosError(error) && error.response) {
+          this.rateLimiter.updateFromResponse(
+            error.response.status,
+            error.response.headers as Record<string, unknown>
+          );
+        }
+        return Promise.reject(error);
+      }
     );
   }
 
@@ -104,7 +116,9 @@ export class XeOpsScannerClient {
    */
   async startScan(request: ScanRequest): Promise<ScanResponse> {
     try {
-      const response = await this.client.post<ScanResponse>('/api/scans', request);
+      const response = await this.requestWithRetry(() =>
+        this.client.post<ScanResponse>('/api/scans', request)
+      );
       return response.data;
     } catch (error) {
       throw this.formatError('Failed to start scan', error);
@@ -116,7 +130,9 @@ export class XeOpsScannerClient {
    */
   async getScanResult(scanId: string): Promise<ScanResult> {
     try {
-      const response = await this.client.get<ScanResult>(`/api/scans/${scanId}`);
+      const response = await this.requestWithRetry(() =>
+        this.client.get<ScanResult>(`/api/scans/${scanId}`)
+      );
       return response.data;
     } catch (error) {
       throw this.formatError('Failed to get scan result', error);
@@ -128,7 +144,9 @@ export class XeOpsScannerClient {
    */
   async getGraph(scanId: string): Promise<ScanGraph> {
     try {
-      const response = await this.client.get<ScanGraph>(`/api/scans/${scanId}/graph`);
+      const response = await this.requestWithRetry(() =>
+        this.client.get<ScanGraph>(`/api/scans/${scanId}/graph`)
+      );
       return response.data;
     } catch (error) {
       throw this.formatError('Failed to get scan graph', error);
@@ -140,7 +158,9 @@ export class XeOpsScannerClient {
    */
   async getFindings(scanId: string): Promise<ScanFinding[]> {
     try {
-      const response = await this.client.get<ScanFinding[] | { findings?: ScanFinding[] }>(`/api/scans/${scanId}/findings`);
+      const response = await this.requestWithRetry(() =>
+        this.client.get<ScanFinding[] | { findings?: ScanFinding[] }>(`/api/scans/${scanId}/findings`)
+      );
       const data = response.data;
 
       if (Array.isArray(data)) {
@@ -305,13 +325,13 @@ export class XeOpsScannerClient {
     validatePoc: boolean = true
   ): Promise<Buffer> {
     try {
-      const response = await this.client.get(
+      const response = await this.requestWithRetry(() => this.client.get(
         `/api/scans/${scanId}/report/pdf`,
         {
           params: { validate_poc: validatePoc },
           responseType: 'arraybuffer'
         }
-      );
+      ));
       return Buffer.from(response.data);
     } catch (error) {
       throw this.formatError('Failed to download PDF report', error);
@@ -323,7 +343,9 @@ export class XeOpsScannerClient {
    */
   async getUsage(): Promise<UsageStats> {
     try {
-      const response = await this.client.get<UsageStats>('/api/users/usage');
+      const response = await this.requestWithRetry(() =>
+        this.client.get<UsageStats>('/api/users/usage')
+      );
       return response.data;
     } catch (error) {
       throw this.formatError('Failed to get usage stats', error);
@@ -335,7 +357,7 @@ export class XeOpsScannerClient {
    */
   async verifyApiKey(): Promise<boolean> {
     try {
-      await this.client.get('/api/auth/verify');
+      await this.requestWithRetry(() => this.client.get('/api/auth/verify'));
       return true;
     } catch (error) {
       return false;
@@ -347,7 +369,9 @@ export class XeOpsScannerClient {
    */
   async healthCheck(): Promise<{ status: string; version: string }> {
     try {
-      const response = await this.client.get<{ status: string; version: string }>('/health');
+      const response = await this.requestWithRetry(() =>
+        this.client.get<{ status: string; version: string }>('/health')
+      );
       return response.data;
     } catch (error) {
       throw this.formatError('Health check failed', error);
@@ -359,7 +383,7 @@ export class XeOpsScannerClient {
    */
   async cancelScan(scanId: string): Promise<void> {
     try {
-      await this.client.post(`/api/scans/${scanId}/cancel`);
+      await this.requestWithRetry(() => this.client.post(`/api/scans/${scanId}/cancel`));
     } catch (error) {
       throw this.formatError('Failed to cancel scan', error);
     }
@@ -374,9 +398,9 @@ export class XeOpsScannerClient {
     offset?: number;
   }): Promise<ScanResult[]> {
     try {
-      const response = await this.client.get<ScanResult[]>('/api/scans', {
+      const response = await this.requestWithRetry(() => this.client.get<ScanResult[]>('/api/scans', {
         params
-      });
+      }));
       return response.data;
     } catch (error) {
       throw this.formatError('Failed to list scans', error);
@@ -409,6 +433,33 @@ export class XeOpsScannerClient {
     } catch {
       return null;
     }
+  }
+
+  private async requestWithRetry<T>(request: () => Promise<T>): Promise<T> {
+    const maxAttempts = this.config.maxRetries + 1;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      await this.rateLimiter.waitForAvailability();
+
+      try {
+        return await request();
+      } catch (error) {
+        if (!axios.isAxiosError(error)) {
+          throw error;
+        }
+
+        const statusCode = error.response?.status;
+        const retryDecision = this.rateLimiter.getRetryDecision(statusCode, attempt);
+        const isLastAttempt = attempt >= maxAttempts - 1;
+        if (!retryDecision.shouldRetry || isLastAttempt) {
+          throw this.formatError('Request failed', error);
+        }
+
+        await this.sleep(retryDecision.delayMs);
+      }
+    }
+
+    throw new ScannerError('Request failed after retries');
   }
 
   /**
