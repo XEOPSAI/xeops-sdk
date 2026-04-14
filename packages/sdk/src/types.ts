@@ -123,6 +123,11 @@ export interface LiveScanOptions {
   transport?: 'auto' | 'ws' | 'sse';
 }
 
+export interface ScanCommandRequest {
+  command: 'focus' | 'skip' | 'pause' | 'resume' | 'stop';
+  value?: string;
+}
+
 export interface UsageStats {
   scansUsed: number;
   scansLimit: number;

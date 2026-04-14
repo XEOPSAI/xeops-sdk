@@ -11,7 +11,8 @@ import {
   ScanFinding,
   ScanLiveEvent,
   ScanLiveEventHandlers,
-  LiveScanOptions
+  LiveScanOptions,
+  ScanCommandRequest
 } from './types';
 import {
   ScannerAuthConfig,
@@ -245,6 +246,17 @@ export class XeOpsScannerClient {
       source.close();
       handlers.onClose?.();
     };
+  }
+
+  /**
+   * Send a live command to an active scan.
+   */
+  async sendScanCommand(scanId: string, command: ScanCommandRequest): Promise<void> {
+    try {
+      await this.client.post(`/api/scans/${scanId}/live`, command);
+    } catch (error) {
+      throw this.formatError('Failed to send scan command', error);
+    }
   }
 
   /**

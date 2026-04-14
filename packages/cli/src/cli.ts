@@ -6,6 +6,7 @@ import ora from 'ora';
 import { XeOpsScannerClient, ScanResult } from '@xeopsai/scanner-sdk';
 import * as fs from 'fs';
 import { computeExitCode, parseTimeoutSeconds } from './options';
+import { startInteractiveSession, toCommandPayload } from './interactive';
 
 const program = new Command();
 
@@ -27,6 +28,7 @@ program
   .option('--fail-on-high', 'Exit with code 1 if high/critical vulnerabilities found', false)
   .option('--fail-on-medium', 'Exit with code 1 if medium+ vulnerabilities found', false)
   .option('--json', 'Output results as JSON', false)
+  .option('--interactive', 'Interactive mode with live findings and commands', false)
   .action(async (options) => {
     const client = new XeOpsScannerClient({
       apiEndpoint: options.endpoint,
@@ -55,6 +57,11 @@ program
       console.log(chalk.blue(`Target: ${options.url}`));
 
       let result: ScanResult | undefined;
+
+      if (options.interactive) {
+        await runInteractiveMode(client, scanResponse.scanId);
+        return;
+      }
 
       // Wait for completion if requested
       if (options.wait) {
@@ -233,6 +240,41 @@ function getExitCode(
   }
 ): number {
   return computeExitCode(result.metadata, options);
+}
+
+async function runInteractiveMode(
+  client: XeOpsScannerClient,
+  scanId: string
+): Promise<void> {
+  console.log(chalk.yellow('\nInteractive mode enabled. Type "help" for commands.\n'));
+
+  const stopEvents = client.subscribeToScanEvents(scanId, {
+    onEvent: (event) => {
+      const timestamp = event.timestamp || new Date().toISOString();
+      console.log(chalk.gray(`[${timestamp}]`), chalk.green(event.type), JSON.stringify(event.payload));
+    },
+    onError: (error) => {
+      console.error(chalk.red(`Live event error: ${error.message}`));
+    }
+  });
+
+  await new Promise<void>((resolve) => {
+    startInteractiveSession({
+      onCommand: async (command) => {
+        const payload = toCommandPayload(command);
+        await client.sendScanCommand(scanId, {
+          command: payload.command as 'focus' | 'skip' | 'pause' | 'resume' | 'stop',
+          value: payload.value
+        });
+
+        console.log(chalk.blue(`Command sent: ${payload.command}${payload.value ? ` ${payload.value}` : ''}`));
+      },
+      onQuit: () => {
+        stopEvents();
+        resolve();
+      }
+    });
+  });
 }
 
 program.parse(process.argv);
