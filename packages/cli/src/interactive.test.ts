@@ -14,6 +14,13 @@ describe('parseInteractiveCommand', () => {
     });
   });
 
+  it('normalizes command names to lowercase', () => {
+    expect(parseInteractiveCommand('FoCuS /admin')).toEqual({
+      name: 'focus',
+      args: ['/admin']
+    });
+  });
+
   it('returns null for unsupported commands', () => {
     expect(parseInteractiveCommand('unknown value')).toBeNull();
   });
