@@ -3,12 +3,20 @@ import chalk from 'chalk';
 import { XeOpsScannerClient, ScanLiveEvent } from '@xeopsai/sdk';
 
 const INTERACTIVE_COMMANDS = ['focus', 'skip', 'pause', 'resume', 'stop', 'help', 'exit'] as const;
+const FINDING_EVENT_TYPE = 'finding';
+const DEFAULT_EVENT_TYPE = 'event';
 
 type InteractiveCommand = (typeof INTERACTIVE_COMMANDS)[number];
 
 interface ParsedCommand {
   name: InteractiveCommand;
   args: string[];
+}
+
+interface FindingPayload {
+  title?: string;
+  severity?: string;
+  endpoint?: string;
 }
 
 export interface InteractiveScanOptions {
@@ -58,9 +66,41 @@ export function parseInteractiveCommand(input: string): ParsedCommand | null {
  * Formats a live event line for terminal display.
  */
 export function formatLiveEvent(event: ScanLiveEvent): string {
-  const eventType = event.type || 'event';
+  const eventType = event.type || DEFAULT_EVENT_TYPE;
+
+  if (eventType === FINDING_EVENT_TYPE) {
+    return formatFindingLiveEvent(event.payload as FindingPayload);
+  }
+
   const payload = JSON.stringify(event.payload ?? {});
   return chalk.cyan(`[live] ${eventType}`) + ` ${payload}\n`;
+}
+
+/**
+ * Formats a finding live event with highlighted severity and endpoint.
+ */
+export function formatFindingLiveEvent(payload: FindingPayload): string {
+  const severity = (payload.severity || 'unknown').toLowerCase();
+  const severityLabel = colorizeSeverity(severity);
+  const title = payload.title || 'Untitled finding';
+  const endpoint = payload.endpoint || 'n/a';
+
+  return `${chalk.magenta('[finding]')} ${severityLabel} ${title} (${endpoint})\n`;
+}
+
+/**
+ * Validates that command arguments are present when required.
+ */
+export function validateCommandArguments(command: ParsedCommand): string | null {
+  if (command.name === 'focus' && command.args.length === 0) {
+    return 'focus requires a target argument';
+  }
+
+  if (command.name === 'skip' && command.args.length === 0) {
+    return 'skip requires a vulnerability type argument';
+  }
+
+  return null;
 }
 
 async function consumeInteractiveInput(client: XeOpsScannerClient, scanId: string): Promise<void> {
@@ -96,9 +136,14 @@ async function executeInteractiveCommand(
     return true;
   }
 
+  const argumentError = validateCommandArguments(command);
+  if (argumentError) {
+    process.stdout.write(chalk.yellow(`${argumentError}\n`));
+    return false;
+  }
+
   const payload = buildCommandPayload(command);
-  const liveCommand = command.name === 'stop' ? 'stop' : command.name;
-  await client.sendLiveCommand(scanId, liveCommand, payload);
+  await client.sendLiveCommand(scanId, command.name, payload);
   process.stdout.write(chalk.green(`Sent command: ${command.name}\n`));
   return false;
 }
@@ -113,4 +158,24 @@ function buildCommandPayload(command: ParsedCommand): Record<string, unknown> {
   }
 
   return {};
+}
+
+function colorizeSeverity(severity: string): string {
+  if (severity === 'critical') {
+    return chalk.redBright(severity.toUpperCase());
+  }
+
+  if (severity === 'high') {
+    return chalk.red(severity.toUpperCase());
+  }
+
+  if (severity === 'medium') {
+    return chalk.yellow(severity.toUpperCase());
+  }
+
+  if (severity === 'low') {
+    return chalk.blue(severity.toUpperCase());
+  }
+
+  return chalk.gray(severity.toUpperCase());
 }
