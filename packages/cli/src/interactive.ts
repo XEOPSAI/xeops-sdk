@@ -41,8 +41,11 @@ export async function runInteractiveScan(
     onError: (error) => process.stdout.write(chalk.red(`Live stream error: ${error.message}\n`))
   });
 
-  await consumeInteractiveInput(client, scanId);
-  unsubscribe();
+  try {
+    await consumeInteractiveInput(client, scanId);
+  } finally {
+    unsubscribe();
+  }
 }
 
 /**
@@ -143,9 +146,16 @@ async function executeInteractiveCommand(
   }
 
   const payload = buildCommandPayload(command);
-  await client.sendLiveCommand(scanId, command.name, payload);
-  process.stdout.write(chalk.green(`Sent command: ${command.name}\n`));
-  return false;
+
+  try {
+    await client.sendLiveCommand(scanId, command.name, payload);
+    process.stdout.write(chalk.green(`Sent command: ${command.name}\n`));
+    return false;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'unknown error';
+    process.stdout.write(chalk.red(`Command failed: ${message}\n`));
+    return false;
+  }
 }
 
 function buildCommandPayload(command: ParsedCommand): Record<string, unknown> {
