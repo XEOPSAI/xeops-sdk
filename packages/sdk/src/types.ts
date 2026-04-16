@@ -131,7 +131,7 @@ export interface UsageStats {
 }
 
 export interface ScannerSDKConfig {
-  apiEndpoint: string;
+  apiEndpoint?: string;
   apiKey?: string;
   auth?: ScannerAuthConfig;
   timeout?: number;

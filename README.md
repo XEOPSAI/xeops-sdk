@@ -68,7 +68,7 @@ xeops scan report <scan-id> --format pdf --output report.pdf
 ```typescript
 const client = new XeOpsClient({
   apiKey: string,           // Your API key
-  baseUrl?: string,         // API URL (default: https://api.xeops.io)
+  baseUrl?: string,         // API URL (default: https://api.hargos.ai)
   timeout?: number,         // Request timeout in ms (default: 30000)
 });
 ```
