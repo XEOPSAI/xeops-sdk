@@ -21,7 +21,7 @@ program
   .description('Start a security scan')
   .requiredOption('-u, --url <url>', 'Target URL to scan')
   .requiredOption('-k, --api-key <key>', 'XeOps API key')
-  .option('-e, --endpoint <endpoint>', 'API endpoint', 'https://xeops-scanner-97758009309.europe-west1.run.app')
+  .option('-e, --endpoint <endpoint>', 'API endpoint', 'https://api.hargos.ai')
   .option('-w, --wait', 'Wait for scan to complete', false)
   .option('--timeout <seconds>', 'Scan timeout in seconds', '1800')
   .option('--pdf <path>', 'Download PDF report to path')
@@ -149,7 +149,7 @@ program
   .description('Check scan status')
   .requiredOption('-s, --scan-id <id>', 'Scan ID')
   .requiredOption('-k, --api-key <key>', 'XeOps API key')
-  .option('-e, --endpoint <endpoint>', 'API endpoint', 'https://xeops-scanner-97758009309.europe-west1.run.app')
+  .option('-e, --endpoint <endpoint>', 'API endpoint', 'https://api.hargos.ai')
   .option('--json', 'Output as JSON', false)
   .action(async (options) => {
     const client = new XeOpsScannerClient({
@@ -172,7 +172,7 @@ program
   .requiredOption('-s, --scan-id <id>', 'Scan ID')
   .requiredOption('-k, --api-key <key>', 'XeOps API key')
   .requiredOption('-o, --output <path>', 'Output PDF path')
-  .option('-e, --endpoint <endpoint>', 'API endpoint', 'https://xeops-scanner-97758009309.europe-west1.run.app')
+  .option('-e, --endpoint <endpoint>', 'API endpoint', 'https://api.hargos.ai')
   .option('--validate-poc', 'Validate vulnerabilities with PoC', true)
   .action(async (options) => {
     const client = new XeOpsScannerClient({
@@ -198,7 +198,7 @@ program
   .command('usage')
   .description('Show usage statistics')
   .requiredOption('-k, --api-key <key>', 'XeOps API key')
-  .option('-e, --endpoint <endpoint>', 'API endpoint', 'https://xeops-scanner-97758009309.europe-west1.run.app')
+  .option('-e, --endpoint <endpoint>', 'API endpoint', 'https://api.hargos.ai')
   .action(async (options) => {
     const client = new XeOpsScannerClient({
       apiEndpoint: options.endpoint,

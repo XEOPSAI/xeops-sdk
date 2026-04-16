@@ -21,6 +21,21 @@ import {
 } from './auth';
 import { ClientRateLimiter } from './rate_limiter';
 
+export const DEFAULT_API_ENDPOINT = 'https://api.hargos.ai';
+
+/**
+ * Resolve and normalize the API endpoint used by the SDK client.
+ */
+export function resolveApiEndpoint(apiEndpoint?: string): string {
+  const candidate = (apiEndpoint || DEFAULT_API_ENDPOINT).trim();
+
+  if (!candidate) {
+    throw new ScannerError('API endpoint cannot be empty');
+  }
+
+  return candidate;
+}
+
 /**
  * XeOps Security Scanner SDK Client
  * For CI/CD integration and programmatic access
@@ -38,14 +53,20 @@ export class XeOpsScannerClient {
   private rateLimiter: ClientRateLimiter;
 
   constructor(config: ScannerSDKConfig) {
-    this.auth = resolveAuthConfig(config);
+    const apiEndpoint = resolveApiEndpoint(config.apiEndpoint);
+    const normalizedConfig: ScannerSDKConfig = {
+      ...config,
+      apiEndpoint
+    };
+
+    this.auth = resolveAuthConfig(normalizedConfig);
 
     this.config = {
-      timeout: config.timeout || 60000,
-      maxRetries: config.maxRetries || 3,
-      retryDelay: config.retryDelay || 1000,
-      debug: config.debug || false,
-      ...config
+      timeout: normalizedConfig.timeout || 60000,
+      maxRetries: normalizedConfig.maxRetries || 3,
+      retryDelay: normalizedConfig.retryDelay || 1000,
+      debug: normalizedConfig.debug || false,
+      ...normalizedConfig
     };
 
     this.rateLimiter = new ClientRateLimiter({
