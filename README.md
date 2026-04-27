@@ -1,4 +1,8 @@
-Repository archived — see hargos/hargos-monorepo\n\nThis GitHub repository is read-only after the Hargos migration. Active development moved to https://git.hargos.ai/hargos/hargos-monorepo.\n\n---\n\n# XeOps SDK
+Repository archived — see hargos/hargos-monorepo
+
+This GitHub repository is read-only after the Hargos migration. Active development moved to https://git.hargos.ai/hargos/hargos-monorepo.
+
+---# XeOps SDK
 
 Official TypeScript SDK and CLI for the XeOps Security Platform.
 
